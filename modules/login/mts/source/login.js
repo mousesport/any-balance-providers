@@ -1,4 +1,5 @@
 var g_baseurlLogin = 'http://login.mts.ru';
+var g_savedData;
 
 function checkLoginError(html, options) {
 	var prefs = AnyBalance.getPreferences();
@@ -126,11 +127,73 @@ function getOrdinaryLoginForm(html){
 	return getElement(html, /<form[^>]+name="Login"/i);
 }
 
+function loadProtectedPage(fromUrl, headers){
+    const url = fromUrl.startsWith(g_baseurlLogin) ? fromUrl : g_baseurlLogin;
+
+    var html = AnyBalance.requestGet(url, headers);
+    if(/__qrator/.test(html)) {
+        AnyBalance.trace("Требуется обойти QRATOR");
+        clearAllCookies();
+
+        const bro = new BrowserAPI({
+            userAgent: g_headers["User-Agent"],
+            rules: [{
+                resType: /^(image|stylesheet|font)$/.toString(),
+                action: 'abort',
+            }, {
+                url: /_qrator/.toString(),
+                action: 'request',
+            }, {
+                resType: /^(image|stylesheet|font|script)$/i.toString(),
+                action: 'abort',
+            }, {
+                url: /\.(png|jpg|ico)/.toString(),
+                action: 'abort',
+            }, {
+                url: /.*/.toString(),
+                action: 'request',
+            }],
+            additionalRequestHeaders: {
+                headers: headers
+            }
+        });
+
+        const r = bro.open(url);
+        try {
+            bro.waitForLoad(r.page);
+            html = bro.content(r.page).content;
+            const cookies = bro.cookies(r.page, url);
+            BrowserAPI.useCookies(cookies);
+        } finally {
+            bro.close(r.page);
+        }
+
+        if(/__qrator/.test(html))
+            throw new AnyBalance.Error('Не удалось обойти защиту. Сайт изменен?');
+
+        AnyBalance.trace("Защита QRATOR успешно пройдена");
+
+        if(!g_savedData) {
+            const prefs = AnyBalance.getPreferences();
+            g_savedData = new SavedData('mts', prefs.login);
+        }
+
+        g_savedData.setCookies();
+        g_savedData.save();
+
+    }
+
+    if(!fromUrl.startsWith(g_baseurlLogin))
+        html = AnyBalance.requestGet(fromUrl, headers);
+
+    return html;
+}
 
 function enterMtsLK(options) {
 	var url = options.url || g_baseurlLogin;
 
-    var html = AnyBalance.requestGet(url, g_headers);
+    var html = loadProtectedPage(url, g_headers);
+
     if(fixCookies()){
         AnyBalance.trace("Куки исправлены на входе...");
         html = AnyBalance.requestGet(AnyBalance.getLastUrl(), g_headers);
@@ -148,7 +211,7 @@ function enterMtsLK(options) {
 
     if(/Произошла ошибка при попытке авторизации/i.test(html)){
     	AnyBalance.trace('Куки протухли :( Придется авторизоваться заново');
-    	clearAllCookies();
+    	clearAllCookiesExceptProtection();
     	html = AnyBalance.requestGet(url, g_headers);
     	fixCookies()
     }
@@ -263,6 +326,10 @@ function loginOrdinaryForm(html, options){
     // AnyBalance.trace("Login params: " + JSON.stringify(params));
     AnyBalance.trace("Логинимся с заданным номером");
     html = AnyBalance.requestPost(options.url, params, addHeaders({Origin: g_baseurlLogin, Referer: options.url}));
+
+    var msocookie = AnyBalance.getCookie('MTSWebSSO');
+    AnyBalance.setCookie('.mts.ru', 'MTSWebSSO', msocookie);
+
     fixCookies();
     return html;
 }
@@ -276,7 +343,7 @@ function enterMTS(options){
     fixCookies();
 
     if(!html || !getOrdinaryLoginForm(html)){
-        html = AnyBalance.requestGet(loginUrl, g_headers);
+        html = loadProtectedPage(loginUrl, g_headers);
         fixCookies();
         if(AnyBalance.getLastStatusCode() >= 500){
             AnyBalance.trace("МТС вернул 500. Пробуем ещё разок...");
@@ -326,6 +393,8 @@ function enterMTS(options){
         });
 
         html = AnyBalance.requestPost(loginUrl, params, addHeaders({Origin: g_baseurlLogin, Referer: loginUrl}));
+        var msocookie = AnyBalance.getCookie('MTSWebSSO');
+        AnyBalance.setCookie('.mts.ru', 'MTSWebSSO', msocookie);
         fixCookies();
     }else if(/bobcmn/i.test(html)){
     	throw new AnyBalance.Error('МТС ввел защиту от автоматического входа. Пожалуйста, обратитесь в поддержку МТС, составьте обращение о невозможности использования третьесторонних программ слежения за балансом. Напомните им, что вы можете перейти к другому оператору, который не противодействует отслеживанию баланса.');       
@@ -360,3 +429,6 @@ function enterMTS(options){
     return html;
 }
 
+function clearAllCookiesExceptProtection(){
+    clearAllCookies(c => !/qrator|StickyID/i.test(c.name) && !/^TS0/i.test(c.name));
+}

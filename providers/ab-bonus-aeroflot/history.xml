@@ -1,5 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <history>
+	<change version="16" date="2022-05-30">
+	- Поддержка изменений в процедуре входа.
+	</change>
+	<change version="15" date="2021-06-16">
+	- Поддержка изменений на сайте.
+	</change>
 	<change version="14" date="2021-03-12">
 	- Поддержка изменений на сайте.
 	</change>

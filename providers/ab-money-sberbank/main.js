@@ -2,10 +2,29 @@
 Провайдер AnyBalance (http://any-balance-providers.googlecode.com)
 */
 
+var g_currency = {
+	руб: '₽',
+	RUB: '₽',
+	RUR: '₽',
+	USD: '$',
+	EUR: '€',
+	GBP: '£',
+	JPY: 'Ұ',
+	CHF: '₣',
+	CNY: '¥',
+	undefined: ''
+};
+
+function myParseCurrency(text) {
+    var val = text.replace(/\s+/g, '').replace(/[\-\d\.,]+/g, '');
+    val = g_currency[val] || val;
+    return val;
+}
+
 var g_countersTable = {
 	common: {
 		'spasibo': 'spasibo',
-		'userName': 'userName',
+		'userName': 'info.fio',
 		'eurPurch': 'eurPurch',
 		'eurSell': 'eurSell',
 		'usdPurch': 'usdPurch',
@@ -56,6 +75,13 @@ var g_countersTable = {
 		"cardNumber": "accounts.num",
 		"__tariff": "accounts.num",
 		"till": "accounts.till",
+		"status": "accounts.status",
+		"userName": "accounts.userName",
+		"cardName": "accounts.cardName",
+		
+		"lastPurchSum": "accounts.transactions10.sum",
+		"lastPurchPlace": "accounts.transactions10.descr",
+		"lastPurchDate": "accounts.transactions10.date"
     },
 	metal_acc: {
     	"balance": "accounts_met.balance",
@@ -74,6 +100,7 @@ var g_countersTable = {
 
 function main(){
 	var prefs = AnyBalance.getPreferences();
+	AnyBalance.setOptions({cookiePolicy: 'rfc2965'});
     if(!/^(card|acc|metal_acc|loan)$/i.test(prefs.type || ''))
     	prefs.type = 'card';
 	
@@ -83,7 +110,6 @@ function main(){
 		mainMobileApp2(prefs, adapter);
 		return;
 	}
-    AnyBalance.setOptions({cookiePolicy: 'rfc2965'});	
     adapter.processRates = adapter.envelope(processRates);
     adapter.processCards = adapter.envelope(processCards);
     adapter.processAccounts = adapter.envelope(processAccounts);
@@ -194,6 +220,7 @@ function mainMobileApp2(prefs, adapter) {
 	}
 	
     adapter.processRatesAPI = adapter.envelope(processRatesAPI);
+	adapter.processInfoAPI = adapter.envelope(processInfoAPI);
     adapter.processCardsAPI = adapter.envelope(processCardsAPI);
     adapter.processAccountsAPI = adapter.envelope(processAccountsAPI);
     adapter.processThanksAPI = adapter.envelope(processThanksAPI);
@@ -203,6 +230,7 @@ function mainMobileApp2(prefs, adapter) {
 	var result = {success: true};
 	
 	adapter.processRatesAPI(result);
+	adapter.processInfoAPI(result);
 	adapter.processThanksAPI(result);
 	
 	if(prefs.type == 'card') {

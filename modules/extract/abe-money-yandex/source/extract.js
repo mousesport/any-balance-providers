@@ -10,6 +10,21 @@ var g_headers = {
 	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3865.120 Safari/537.36'
 };
 
+var g_currency = {
+	643: '₽',
+	843: '$',
+	978: '€',
+	933: 'Br',
+	398: '₸',
+	826: '£',
+	156: 'Ұ',
+	756: '₣',
+	203: 'Kč',
+	985: 'zł',
+	392: '¥',
+	undefined: ''
+};
+
 var baseurl = 'https://yoomoney.ru/';
 var g_csrf;
 var g_savedData;
@@ -23,8 +38,8 @@ function callApi(verb, params){
 		'Content-Type': 'application/json;charset=UTF-8',
 		'x-csrf-token': g_csrf
 	}));
-	if (verb=='yooid/signin/api/start-authenticate' && AnyBalance.getLastStatusCode()==404)
-		return 	 callApi ('yooid/signin/api/start',params);
+	if (verb=='yooid/signin/api/process/start/standard' && AnyBalance.getLastStatusCode()==404)
+		return 	 callApi ('yooid/signin/api/process/start',params);
 
 	var json = JSON.parse(html);
 	if(json.status === 'error'){
@@ -52,7 +67,7 @@ function login(){
 		AnyBalance.trace('Already logged in to ' + data.user.userName + ' (' + data.user.maskedPhone + ')');
 	}else{
 		AnyBalance.trace('Logging in anew');
-		html = AnyBalance.requestGet(baseurl + 'yooid/login?origin=Wallet&returnUrl=https%3A%2F%2Fyoomoney.ru%2F', g_headers);
+		html = AnyBalance.requestGet(baseurl + 'yooid/signin?origin=Wallet&returnUrl=https%3A%2F%2Fyoomoney.ru%2F', g_headers);
 		g_csrf = getParam(html, /__secretKey__="([^"]*)/);
 		if(!g_csrf){
 			AnyBalance.trace(html);
@@ -60,18 +75,27 @@ function login(){
 		}
 		var data = getJsonObject(html, /__data__=/);
 	    
-		var jsonProcess = callApi('yooid/signin/api/start-authenticate', {
-			"sessionId":data.tmx.sessionId,
+		var jsonProcess = callApi('yooid/signin/api/process/start/standard', {
+			"tmxSessionId":data.staticData.tmx.sessionId,
 			"login":prefs.login,
 			"origin":"Wallet"
 		});
-	    
-	    
-        var json = callApiProgress('yooid/signin/api/set-login', {
-        	"login":prefs.login,
-        	"processId":jsonProcess.result.processId,
-        	"loginType":jsonProcess.result.loginType
-        });
+	       
+	    var tries = 0;
+	    do{
+	    	var json = callApiProgress('yooid/signin/api/process/start/standard', {
+        		"login":prefs.login,
+        		"processId":jsonProcess.result.processId,
+        		"loginType":jsonProcess.result.loginType,
+	    		"tmxSessionId":data.staticData.tmx.sessionId,
+	    		"origin":"Wallet"
+            });
+	    }while(!json.result.isLoginSet && ++tries < 5);
+
+	    if(!json.result.isLoginSet){
+	    	AnyBalance.trace(JSON.stringify(json));
+	    	throw new AnyBalance.Error('Не удалось войти в личный кабинет. Сайт изменен?');
+	    }
         var _json = json;
         
 		function getNextStepData(json){
@@ -121,27 +145,31 @@ function processStep(data, stepData){
 	AnyBalance.trace('Processing step ' + stepData.nextStep);
 	var json;
 	if(stepData.nextStep === 'SetPassword'){
-		json = callApiProgress('yooid/signin/api/set-password', {
+		json = callApiProgress('yooid/signin/api/password/set', {
 			"processId":data.processId,
 			"loginType":data.loginType,
 			"password":prefs.password
 		});
 	}else if(stepData.nextStep === 'SetConfirmationCode'){
 		var code = AnyBalance.retrieveCode('Пожалуйста, введите код, который послан вам на ' + stepData.maskedRecipient, null, {inputType: 'number', time: 170000});
-		var verbs = {
-			PhoneNumber: 'check-opt-phone',
-			Email: 'check-opt-mail',
-		};
+		// ЮMoney больше не разделяет вход по типу
+//		var verbs = {
+//			PhoneNumber: 'otp/check/phone',
+//			Email: 'otp/check/mail',
+//		};
 
-		if(!verbs[data.loginType])
-			throw new AnyBalance.Error('Неизвестный тип входа: ' + data.loginType);
+//		if(!verbs[data.loginType])
+//			throw new AnyBalance.Error('Неизвестный тип входа: ' + data.loginType);
 
-		json = callApiProgress('yooid/signin/api/' + verbs[data.loginType], {
+        // Теперь в форме задаются loginType и processId
+		json = callApiProgress('yooid/signin/api/otp/check', {
 			"contextId": data.processId,
-			"answer": code
+			"answer": code,
+			"processId":data.processId,
+			"loginType":data.loginType
 		});
 	}else if(stepData.nextStep === 'Complete'){
-		json = callApiProgress('yooid/signin/api/confirm', {
+		json = callApiProgress('yooid/signin/api/process/complete', {
 			"processId":data.processId,
 			"loginType":data.loginType,
 		});
@@ -151,7 +179,7 @@ function processStep(data, stepData){
 		if(!acc[0])
 			throw new AnyBalance.Error('Не удалось найти готовый для входа аккаунт!');
 		
-		json = callApiProgress('yooid/signin/api/select-account', {
+		json = callApiProgress('yooid/signin/api/account/select', {
 			"processId":data.processId,
 			"loginType":data.loginType,
 			"uid": acc[0].uid
@@ -172,22 +200,45 @@ function loginAndGetBalance(prefs, result) {
 	var html = login();
 	
 	var ld = getJsonObject(html, /window.__layoutData__\s*=/);
+	var status={identified:'Идентифицированный', anonymous:'Анонимный',named:'Именной',light:'Именной'};
 	if(ld){
 		AnyBalance.trace('Загружаем из layoutData');
 		getParam(ld.user.accountId, result, 'number');
-		getParam(ld.balance.rub.availableAmount, result, 'balance');
+		getParam(ld.user.accountId, result, '__tariff');
+		getParam(ld.user.userName, result, 'userName');
+		getParam(status[ld.user.accountStatus]||ld.user.accountStatus, result, 'accountStatus');
+		getParam(ld.balance.rub.availableAmount, result, ['balance', 'currency'], null, null, parseBalance);
+		getParam(g_currency[ld.balance.rub.currencyCode], result, ['currency', 'balance']);
 		var sk = ld.secretKey;
 
 		if(ld.balance.bonus){
-			getParam(ld.balance.bonus.availableAmount, result, 'bonus');
+			getParam(ld.balance.bonus.availableAmount, result, 'bonus', null, null, parseBalance);
 		}else{
 			var html = AnyBalance.requestGet(baseurl + 'ajax/layout/accounts?sk=' + encodeURIComponent(sk), addHeaders({
 				Accept: 'application/json, text/plain, */*',
 				Referer: baseurl
 			}));
 			var json = getJson(html);
-			getParam(json.balances.bonus.availableAmount, result, 'bonus');
+			getParam(json.balances.bonus.availableAmount, result, 'bonus', null, null, parseBalance);
 		}
+		   try{
+			var html = AnyBalance.requestGet(baseurl + 'ajax/layout/curtain-cards?sk=' + encodeURIComponent(sk), addHeaders({
+				Accept: 'application/json, text/plain, */*',
+				Referer: baseurl
+			}));
+			var json = getJson(html).ownCards;
+			if (json && json.length>0){
+				json=json[0];
+				getParam(json.cardNumber.substr(-8), result, 'cardNumber');
+				getParam(json.paymentSystem, result, 'paymentSystem');
+				getParam(json.expirationDate, result, 'cardDate',null,null,parseDate);
+				
+			}
+		   }catch(e){
+			AnyBalance.trace('Ошибка получения информации по доп.картам'+e.message);
+		   }
+			//getParam(json.balances.bonus.availableAmount, result, 'bonus');
+
 	}else{
 		AnyBalance.trace('Загружаем по-старинке');
 		getParam(html, result, 'number', /Номер кошелька(?:[^>]*>){2}(\d{10,20})/i, replaceTagsAndSpaces);
@@ -206,7 +257,7 @@ function loginAndGetBalance(prefs, result) {
 		    var params = getParam(html, null, null, /<div[^>]+class="[^>]*\bbalance\b[^>]+data-bem=[']([^']*)/i, replaceHtmlEntities, getJson);
 		    AnyBalance.trace('Получаем баланс из ' + JSON.stringify(params));
 		    if(params && params.balance && params.balance.amount && isset(params.balance.amount.sum)){
-		    	getParam(params.balance.amount.sum, result, 'balance');
+		    	getParam(params.balance.amount.sum, result, 'balance', null, null, parseBalance);
 		    }else{
 				AnyBalance.trace(html);
 				throw new AnyBalance.Error('Не удаётся найти спрятанный баланс! Сайт изменен?');
@@ -215,7 +266,7 @@ function loginAndGetBalance(prefs, result) {
 		    getParam(textsum, result, 'balance', null, replaceTagsAndSpaces, parseBalance);
 		}
     
-		getParam(html, result, 'bonus', /Сколько у вас баллов[\s\S]*?<div[^>]+balance__item[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
+		getParam(html, result, 'bonus', /Скол`ько у вас баллов[\s\S]*?<div[^>]+balance__item[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
 	}
 }
 
@@ -251,10 +302,11 @@ function processHistory(result) {
 }
 
 function getCombinedHistory(){
+	return [];
 	var maxCount = 100;
 	var htmlBalls = AnyBalance.requestGet(baseurl + 'ajax/load-bonus-history?recordCount=' + maxCount, addHeaders({'X-Requested-With': 'XMLHttpRequest'}));
-	var htmlTrns = AnyBalance.requestGet(baseurl + 'ajax/history/partly?ncrnd=72010&history_shortcut=history_all&start-record=0&record-count=' + maxCount, addHeaders({'X-Requested-With': 'XMLHttpRequest'}));
 	var jsonBalls = getJson(htmlBalls);		
+	var htmlTrns = AnyBalance.requestGet(baseurl + 'ajax/history/partly?ncrnd=72010&history_shortcut=history_all&start-record=0&record-count=' + maxCount, addHeaders({'X-Requested-With': 'XMLHttpRequest'}));
 	var jsonTrns = getJson(htmlTrns);
 
 	combineHistory(jsonTrns, jsonBalls);

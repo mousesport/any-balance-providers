@@ -7,7 +7,7 @@ var g_headers = {
 	'Accept-Charset':'windows-1251,utf-8;q=0.7,*;q=0.3',
 	'Accept-Language':'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4',
 	'Connection':'keep-alive',
-	'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.80 Safari/537.36'
+	'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome 93.0.4577.0 Safari/537.36'
 };
 
 var nodeUrl = ''; // Подставляется при авторизации, обычно имеет вид https://node1.online.sberbank.ru/
@@ -31,10 +31,11 @@ function getLoggedInHtml(lastChance){
 
 function login(prefs) {
 	var baseurl = "https://online.sberbank.ru/CSAFront/login.do";
+	var baseurl1 = "https://online.sberbank.ru/CSAFront/index.do#"
 	AnyBalance.setDefaultCharset('utf-8');
 
-	checkEmpty(prefs.login, "Пожалуйста, укажите логин для входа в Сбербанк-Онлайн!");
-	checkEmpty(prefs.password, "Пожалуйста, укажите пароль для входа в Сбербанк-Онлайн!");
+	checkEmpty(prefs.login, "Пожалуйста, укажите логин для входа в СберБанк Онлайн!");
+	checkEmpty(prefs.password, "Пожалуйста, укажите пароль для входа в СберБанк Онлайн!");
 
 	var html = getLoggedInHtml();
 
@@ -42,15 +43,146 @@ function login(prefs) {
         AnyBalance.trace("Уже залогинены, используем текущую сессию");
         return html;
     }
+    
+	if(/bobcmn/i.test(html)){
+    	//К сожалению, пока обход защиты не работает
+		throw new AnyBalance.Error('Вход через сайт заблокирован СберБанком. Пожалуйста, настройте провайдер для входа через API мобильного приложения.')
+//    	AnyBalance.trace('Обнаружена защита от роботов. Обходим.');
+//    	clearAllCookies();
 
+//    	const bapi = new BrowserAPI({
+//			userAgent: g_headers['User-Agent'],
+//			rules: [
+//				{
+//					url: /^https?:\/\/online\.sberbank\.ru/.toString(),
+//					not: true,
+//					action: 'abort',
+//				},{
+//					resType: /^(image|stylesheet|font)$/.toString(),
+//					action: 'abort',
+//				},{
+//					resType: /^(script)$/.toString(),
+//					action: 'continue',
+//				},{
+//					url: /^https?:\/\/online\.sberbank\.ru/.toString(),
+//					action: 'request',
+//				}
+//			],
+//			additionalRequestHeaders: [
+//				{
+//					url: /CSAFront/,
+//					maxCount: 1,
+//					headers: {
+//						'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+//						'Accept-Language': 'en-US,en;q=0.9',
+//						'Sec-Fetch-Dest': 'document',
+//						'Sec-Fetch-Site': 'none',
+//						'Sec-Fetch-Mode': 'navigate',
+//						'Sec-Fetch-User': '?1'
+//					}
+//				},
+//				{
+//					url: /CSAFront/,
+//					headers: {
+//						'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+//						'Accept-Language': 'en-US,en;q=0.9',
+//						'Cache-Control': 'max-age=0',
+//						'Sec-Fetch-Site': 'same-origin',
+//						'Sec-Fetch-Mode': 'navigate'
+//					}
+//				},
+//				{
+//					headers: {
+//						'Accept': '*/*',
+//						'Origin': 'https://online.sberbank.ru',
+//						'Sec-Fetch-Site': 'same-origin',
+//						'Sec-Fetch-Mode': 'cors',
+//						'Sec-Fetch-Dest': 'empty'
+//					}
+//				}
+//			]
+//		});
+
+//    	const {page} = bapi.open(baseurl1);
+//    	try {
+//			bapi.waitForLoad(page);
+//			const {cookies} = bapi.cookies(page, baseurl1);
+//			BrowserAPI.useCookies(cookies);
+//		}finally {
+//			bapi.close(page);
+//		}
+
+	}
+	
 	//Сбер разрешает русские логины и кодирует их почему-то в 1251, хотя в контент-тайп передаёт utf-8.
 	AnyBalance.setDefaultCharset('windows-1251');
 
-	html = AnyBalance.requestPost(baseurl, {
-		'field(login)': prefs.login,
-		'field(password)': prefs.password.substr(0, 30), //Максимальная длина - 30 символов
-		operation: 'button.begin'
-	}, addHeaders({Referer: baseurl, 'X-Requested-With': 'XMLHttpRequest', Origin: 'https://online.sberbank.ru'}));
+	html = AnyBalance.requestPost('https://online.sberbank.ru/CSAFront/authMainJson.do', {
+		deviceprint: 'version=1.7.3&pm_br=Chrome&pm_brmjv=99&iframed=0&intip=&pm_expt=&pm_fpacn=Mozilla&pm_fpan=Netscape&pm_fpasw=internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer&pm_fpco=1&pm_fpjv=0&pm_fpln=lang=ru-RU|syslang=|userlang=&pm_fpol=true&pm_fposp=&pm_fpsaw=1600&pm_fpsbd=&pm_fpsc=24|1600|900|870&pm_fpsdx=&pm_fpsdy=&pm_fpslx=&pm_fpsly=&pm_fpspd=24&pm_fpsui=&pm_fpsw=&pm_fptz=3&pm_fpua=mozilla/5.0 (windows nt 10.0; wow64) applewebkit/537.36 (khtml, like gecko) chrome/99.0.4844.74 safari/537.36|5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.74 Safari/537.36|Win32&pm_fpup=&pm_inpt=&pm_os=Windows&adsblock=0=false|1=false|2=false|3=false|4=false&audio=baseLatency=0.01|sampleRate=48000|state=suspended|maxChannelCount=2|numberOfInputs=1|numberOfOutputs=1|channelCount=2|channelCountMode=max|channelInterpretation=speakers|fftSize=2048|frequencyBinCount=1024|minDecibels=-100|maxDecibels=-30|smoothingTimeConstant=0.8&pm_fpsfse=true&webgl=ver=webgl2|vendor=Google Inc. (Intel)|render=ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0, D3D11-10.18.10.4252)',
+		'jsEvents': '',
+		'domElements': '',
+		operation: 'button.begin',
+		login: prefs.login,
+		password: prefs.password.substr(0, 30), //Максимальная длина - 30 символов
+		'pageInputType': 'INDEX',
+		'loginInputType': 'BY_LOGIN',
+        'storeLogin': false,
+	}, addHeaders({Referer: 'https://online.sberbank.ru/CSAFront/index.do', 'X-TS-AJAX-Request': true}));
+	
+	if(!html || AnyBalance.getLastStatusCode() >= 400){
+        AnyBalance.trace(html);
+        throw new AnyBalance.Error('Сайт СберБанк Онлайн временно недоступен. Попробуйте еще раз позже');
+    }
+
+    var json = getJson(html);
+	
+	if (json.error) {
+		var error = json.error.description;
+    	if (error) {
+			AnyBalance.trace(html);
+       		throw new AnyBalance.Error(error);	
+       	}
+
+       	AnyBalance.trace(html);
+       	throw new AnyBalance.Error('Не удалось войти в личный кабинет. Сайт изменен?');
+    }
+	
+	var state = json.state;
+	var token = json.token;
+	
+	if (json.state == 'NEED_CONFIRM'){
+		var pass = AnyBalance.retrieveCode('Для входа в интернет банк, пожалуйста, введите одноразовый пароль, который выслан вам по SMS.\n\nЕсли вы не хотите постоянно вводить SMS-пароли при входе, вы можете отменить их в настройках вашего СберБанка Онлайн. Это безопасно - для совершения денежных операций требование одноразового пароля всё равно останется', null, {inputType: 'number', time: 300000});
+	
+	    html = AnyBalance.requestPost('https://online.sberbank.ru/CSAFront/authMainJson.do', {
+	    	deviceprint: 'version=1.7.3&pm_br=Chrome&pm_brmjv=99&iframed=0&intip=&pm_expt=&pm_fpacn=Mozilla&pm_fpan=Netscape&pm_fpasw=internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer|internal-pdf-viewer&pm_fpco=1&pm_fpjv=0&pm_fpln=lang=ru-RU|syslang=|userlang=&pm_fpol=true&pm_fposp=&pm_fpsaw=1600&pm_fpsbd=&pm_fpsc=24|1600|900|870&pm_fpsdx=&pm_fpsdy=&pm_fpslx=&pm_fpsly=&pm_fpspd=24&pm_fpsui=&pm_fpsw=&pm_fptz=3&pm_fpua=mozilla/5.0 (windows nt 10.0; wow64) applewebkit/537.36 (khtml, like gecko) chrome/99.0.4844.82 safari/537.36|5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.82 Safari/537.36|Win32&pm_fpup=&pm_inpt=&pm_os=Windows&adsblock=0=false|1=false|2=false|3=false|4=false&audio=baseLatency=0.01|sampleRate=48000|state=suspended|maxChannelCount=2|numberOfInputs=1|numberOfOutputs=1|channelCount=2|channelCountMode=max|channelInterpretation=speakers|fftSize=2048|frequencyBinCount=1024|minDecibels=-100|maxDecibels=-30|smoothingTimeConstant=0.8&pm_fpsfse=true&webgl=ver=webgl2|vendor=Google Inc. (Intel)|render=ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0, D3D11-10.18.10.4252)',
+	    	'jsEvents': '',
+	    	'domElements': '',
+	    	'org.apache.struts.taglib.html.TOKEN': token,
+	    	operation: 'button.next',
+	    	'confirmPassword': pass,
+	    	'token': token,
+	    	'pageInputType': 'INDEX',
+	    }, addHeaders({Referer: 'https://online.sberbank.ru/CSAFront/index.do', 'X-TS-AJAX-Request': true}));
+	
+	    var json = getJson(html);
+	
+	    if (json.state == 'WRONG_PASS') {
+           	AnyBalance.trace(html);
+           	throw new AnyBalance.Error('Неверный SMS-код');
+        }
+	
+	    if (json.error) {
+	    	var error = json.error.description;
+        	if (error) {
+	    		AnyBalance.trace(html);
+           		throw new AnyBalance.Error('Для работы провайдера требуется отказаться от подтверждения входа в систему "СберБанк Онлайн" одноразовым паролем в разделе "Настройки - Безопасность". ' + error);	
+           	}
+
+           	AnyBalance.trace(html);
+           	throw new AnyBalance.Error('Не удалось войти в личный кабинет. Сайт изменен?');
+        }
+	}
+	
 	AnyBalance.setDefaultCharset('utf-8');
 	var error = getParam(html, null, null, /<h1[^>]*>О временной недоступности услуги[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/i, replaceTagsAndSpaces);
 	if (error)
@@ -65,10 +197,11 @@ function login(prefs) {
 		throw new AnyBalance.Error(error, null, /Ошибка идентификации/i.test(error));
 	}
 	
-	var page = getParam(html, null, null, /value\s*=\s*["'](https:[^'"]*?AuthToken=[^'"]*)/i);
+	var page = json.redirect;
+	
 	if (!page) {
 		if(/Выберите один идентификатор/i.test(html)){
-			throw new AnyBalance.Error('Сбербанк сообщает, что Вы несколько раз зарегистрированы в Сбербанк Онлайн. Для работы провайдера, Вам необходимо войти в Сбербанк Онлайн через браузер и выбрать единственный логин.');
+			throw new AnyBalance.Error('СберБанк сообщает, что Вы несколько раз зарегистрированы в СберБанк Онлайн. Для работы провайдера, Вам необходимо войти в СберБанк Онлайн через браузер и выбрать единственный логин.');
 		}
 
 		AnyBalance.trace(html);
@@ -80,10 +213,10 @@ function login(prefs) {
 	if (/online.sberbank.ru\/PhizIC/.test(page)) {
 		html = doNewAccount(page);
 	} else if (/Off_Service/i.test(page))
-		throw new AnyBalance.Error("В настоящее время услуга Сбербанк ОнЛ@йн временно недоступна по техническим причинам. Сбербанк приносит свои извинения за доставленные неудобства.");
+		throw new AnyBalance.Error("В настоящее время услуга СберБанк Онлайн временно недоступна по техническим причинам. СберБанк приносит свои извинения за доставленные неудобства.");
 	else {
         AnyBalance.trace(html);
-        throw new AnyBalance.Error("К сожалению, ваш вариант Сбербанка-онлайн пока не поддерживается. Пожалуйста, обратитесь к разработчикам для исправления ситуации.");
+        throw new AnyBalance.Error("К сожалению, ваш вариант СберБанка Онлайн пока не поддерживается. Пожалуйста, обратитесь к разработчикам для исправления ситуации.");
     }
 
     __setLoginSuccessful();
@@ -168,7 +301,7 @@ function doNewAccount(page) {
 				AnyBalance.trace('Неизвестное подтверждение: ' + active + '. Надеемся, это смс.');
 			}
 
-			var pass = AnyBalance.retrieveCode('Для входа в интернет банк, пожалуйста, введите одноразовый пароль, который выслан вам по СМС.\n\nЕсли вы не хотите постоянно вводить СМС-пароли при входе, вы можете отменить их в настройках вашего Сбербанк-онлайн. Это безопасно - для совершения денежных операций требование одноразового пароля всё равно останется', null, {time: 300000});
+			var pass = AnyBalance.retrieveCode('Для входа в интернет банк, пожалуйста, введите одноразовый пароль, который выслан вам по СМС.\n\nЕсли вы не хотите постоянно вводить СМС-пароли при входе, вы можете отменить их в настройках вашего СберБанка Онлайн. Это безопасно - для совершения денежных операций требование одноразового пароля всё равно останется', null, {time: 300000});
 			
 			html = AnyBalance.requestPost(baseurl + '/PhizIC/async/confirm.do', {
 				'receiptNo': '',
@@ -204,7 +337,7 @@ function doNewAccount(page) {
 
 	} else if(AnyBalance.getLastStatusCode() >= 400){
 		AnyBalance.trace(html);
-		throw new AnyBalance.Error('Временные технические проблемы в Сбербанк-онлайн. Пожалуйста, попробуйте ещё раз позже.');
+		throw new AnyBalance.Error('Временные технические проблемы в СберБанка Онлайн. Пожалуйста, попробуйте ещё раз позже.');
 	} else {
 		AnyBalance.trace(html);
 		throw new AnyBalance.Error('Ваш тип личного кабинета не поддерживается. Свяжитесь, пожалуйста, с разработчиками.');
@@ -257,38 +390,49 @@ function parseAllow(str){
 
 function processAccount(html, result, pageToken){
     AnyBalance.trace('Обработка счета ' + result.__name);
-
     var isTarget = /thermometertargetTemplate/i.test(html);
 
     if(!isTarget){
 		getParam(html, result, 'accounts.balance', /overallAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'accounts.pct', /descriptionRight[^>]*>\s*([\d.,]+%)/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, ['accounts.currency', 'accounts.balance'], /overallAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseCurrency);
-		getParam(html, result, 'accounts.till', /<[^>]*class="(?:product|account)Number\b[^"]*">[^<]+,\s+действует (?:до|по)([^<]+)/i, replaceTagsAndSpaces, parseDateWord);
+		getParam(html, result, 'accounts.pct', /ставка:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
+		getParam(html, result, ['accounts.currency', 'accounts.balance'], /overallAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, myParseCurrency);
+		getParam(html, result, 'accounts.till', /Дата окончания срока действия:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseDate);
 	}else{
 		//Целевой
 		getParam(html, result, 'accounts.balance', /dribbleCenter\b[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'accounts.pct', /ставка:\s*([\d.,]+%)/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, ['accounts.currency', 'accounts.balance'], /dribbleCenter\b[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseCurrency);
+		getParam(html, result, 'accounts.pct', /ставка:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
+		getParam(html, result, ['accounts.currency', 'accounts.balance'], /dribbleCenter\b[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, myParseCurrency);
 		getParam(html, result, 'accounts.till', /Дата покупки\s*<span[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseDate);
 	}
 
 	if(AnyBalance.isAvailable('accounts.num', 'accounts.period', 'accounts.balance_min', 'accounts.pct_conditions', 'accounts.status', 'accounts.prolong', 'accounts.withdraw', 'accounts.topup')){
 		var info = AnyBalance.requestGet(nodeUrl + '/PhizIC/private/accounts/info.do?id=' + result.__id, g_headers);
 	    
-		getParam(info, result, 'accounts.num', /Номер счета[^<]*:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
-		getParam(info, result, 'accounts.period', /Срок вклада:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
+		getParam(info, result, 'accounts.cardName', /Название типа вклада:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/, replaceTagsAndSpaces);
+		getParam(info, result, 'accounts.userName', /<div[^>]+class="roundAvatar"[\s\S]*?class=""[^>]*>([\s\S]*?)<\/span>/, replaceTagsAndSpaces, capitalFirstLetters);
+		var num = getParam(info, null, null, /Номер сч[е|ё]та[^<]*:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
+		getParam(num.replace(/\D/g, ''), result, 'accounts.num', null, null);
+		getParam(info, result, 'accounts.period', /Срок вклада:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, capitalFirstLetters);
+		getParam(info, result, 'accounts.pct', /ставка:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(info, result, 'accounts.balance_min', /Сумма неснижаемого остатка:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(info, result, 'accounts.pct_conditions', /Порядок уплаты процентов:[\s\S]*?<td[^>]*>([\s\S]*?)(?:<\/td>|<script)/i, replaceTagsAndSpaces);
 		getParam(info, result, 'accounts.status', /Текущее состояние:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
+		getParam(info, result, 'accounts.till', /Дата окончания срока действия:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseDate);
 		//Пролонгация:	не осуществляется|осуществляется
 		getParam(info, result, 'accounts.prolong', /Пролонгация:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces); 
 		getParam(info, result, 'accounts.withdraw', /Списание:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseAllow);
 		getParam(info, result, 'accounts.topup', /Зачисление:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseAllow);
+		
+		var data = getJsonObject(info, /\"region\.products\":/);
+		
+		var joinSpaces = create_aggregate_join(' ');
+        sumParam(data.profile.firstName, result, 'accounts.userName', null, null, capitalFirstLetters, joinSpaces);
+        sumParam(data.profile.patrName, result, 'accounts.userName', null, null, capitalFirstLetters, joinSpaces);
+        sumParam(data.profile.surName, result, 'accounts.userName', null, null, capitalFirstLetters, joinSpaces);
 	}
 	
-	if(AnyBalance.isAvailable('accounts.transactions'))
-		processAccountTransactions(pageToken, result);
+	if(AnyBalance.isAvailable('accounts.transactions10'))
+		processAccountLast10Transactions(pageToken, result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -322,22 +466,31 @@ function processCard(html, result){
     AnyBalance.trace('Обработка карты ' + result.__name);
 	
 	getParam(html, result, 'cards.balance', /productAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseBalance);
-	getParam(html, result, ['cards.currency', 'cards.balance', 'cards.cash', 'cards.electrocash', 'cards.debt', 'cards.maxlimit'], /overallAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseCurrency);
+	getParam(html, result, ['cards.currency', 'cards.balance', 'cards.cash', 'cards.electrocash', 'cards.debt', 'cards.maxlimit'], /overallAmount\b[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, myParseCurrency);
 	getParam(html, result, 'cards.cardNumber', /<[^>]*class="accountNumber\b[^"]*">([^<,]+)/i, replaceTagsAndSpaces);
-	getParam(html, result, 'cards.till', /<[^>]*class="accountNumber\b[^"]*">[^<]+,\s+действует (?:до|по)([^<]+)/i, replaceTagsAndSpaces, parseDateWord);
+	getParam(html, result, 'cards.till', /<[^>]*class="accountNumber\b[^"]*">[^<]+,\s+действует (?:до|по)([^<]+)/i, replaceTagsAndSpaces, parseDate);
     getParam(html, result, 'cards.accnum', /<[^>]*class="accountNumber\b[^"]*">([^<,]+)/i, replaceTagsAndSpaces);
-    getParam(html, result, 'cards.status', /<[^>]*class="detailStatus\b[^"]*">([^<]+)/i, replaceTagsAndSpaces);
+    getParam(html, result, 'cards.status', /Состояние сч(?:е|ё)та[\s\S]*?<nobr[^>]*>([\s\S]*?)<\/nobr>/i, replaceTagsAndSpaces);
     getParam(html, result, 'cards.is_blocked', /Blocked.jpg/i, null, function(str) { return !!str});
 
 	if (AnyBalance.isAvailable('cards.userName', 'cards.own', 'cards.cash', 'cards.electrocash', 'cards.minpay', 'cards.minpay_till', 'cards.limit', 'cards.debt', 'cards.debt_date')) {
 		html = AnyBalance.requestGet(nodeUrl + '/PhizIC/private/cards/detail.do?id=' + _id);
-		getParam(html, result, 'cards.userName', /Держатель карты[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/, replaceTagsAndSpaces, capitalFirstLetters);
-        getParam(html, result, 'cards.accnum', /Номер счета карты[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/, replaceTagsAndSpaces);
+		
+		getParam(html, result, 'cards.cardName', /<span[^>]+class="mainProductTitle\s?mainProductDetailTitle\s?">([\s\S]*?)<\/span>/, replaceTagsAndSpaces);
+//		getParam(html, result, 'cards.userName', /<div[^>]+class="roundAvatar"[\s\S]*?class=""[^>]*>([\s\S]*?)<\/span>/, replaceTagsAndSpaces, capitalFirstLetters);
+//		getParam(html, result, 'cards.userName', /Держатель карты[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/, replaceTagsAndSpaces, capitalFirstLetters);
+        getParam(html, result, 'cards.accnum', /Номер сч(?:е|ё)та карты[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/, replaceTagsAndSpaces);
+		var state = getParam(html, null, null, /Состояние сч(?:е|ё)та[\s\S]*?<nobr[^>]*>([\s\S]*?)<\/nobr>/i, replaceTagsAndSpaces);
+		if (/\d/g.test(state)) {
+			getParam('Активен', result, 'cards.status', null, null);
+	    }else{
+			getParam(state, result, 'cards.status', null, null);
+		}
 		getParam(html, result, 'cards.cash', /Для снятия наличных[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(html, result, 'cards.electrocash', /для покупок\s*(?::|и платежей)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(html, result, 'cards.minpay', /Обязательный платеж[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(html, result, 'cards.minpay_till', /Обязательный платеж, внесите до([^<]*)/, replaceTagsAndSpaces, parseDateWord);
-		getParam(html, result, 'cards.limit', /Кредитный лимит[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
+		getParam(html, result, 'cards.limit', /Кредитный лимит[\s\S]*?<nobr[^>]*>([\s\S]*?)<\/nobr>/i, replaceTagsAndSpaces, parseBalance);
         getParam(html, result, 'cards.own', /Собственные средства[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 
 		getParam(html, result, 'cards.debt', /(?:Общая задолженность|Задолженность\s*<br[^>]*>\s*на сегодня)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
@@ -345,6 +498,13 @@ function processCard(html, result){
 
 		getParam(html, result, 'cards.gracepay', /Задолженность льготного периода[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
 		getParam(html, result, 'cards.gracepay_till', /Задолженность льготного периода(?:[\s\S](?!<\/tr>))*?внести эту сумму до([^<,]*)/i, replaceTagsAndSpaces, parseDateWord);
+		
+		var data = getJsonObject(html, /\"region\.products\":/);
+		
+	    var joinSpaces = create_aggregate_join(' ');
+        sumParam(data.profile.firstName, result, 'cards.userName', null, null, capitalFirstLetters, joinSpaces);
+        sumParam(data.profile.patrName, result, 'cards.userName', null, null, capitalFirstLetters, joinSpaces);
+        sumParam(data.profile.surName, result, 'cards.userName', null, null, capitalFirstLetters, joinSpaces);
 
 	}
 	// // Нужно только для старого провайдера
@@ -399,7 +559,7 @@ function processLoan(html, result){
     AnyBalance.trace('Обработка кредита ' + result.__name);
 	
 	getParam(html, result, 'credits.balance', /Осталось (?:погасить|оплатить)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
-	getParam(html, result, ['credits.currency', 'credits.balance', 'credits.limit', 'credits.minpay'], /Осталось (?:погасить|оплатить)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseCurrency);
+	getParam(html, result, ['credits.currency', 'credits.balance', 'credits.limit', 'credits.minpay'], /Осталось (?:погасить|оплатить)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, myParseCurrency);
 	getParam(html, result, 'credits.minpay_till', /<td[^>]+field[^>]*>\s*Плат[ёе]ж([^<]*)/i, replaceTagsAndSpaces, parseDateWord);
 	getParam(html, result, 'credits.minpay', /<td[^>]+field[^>]*>\s*Плат[ёе]ж[\s\S]*?<td[^>]*>([\s\S]*?)<\/span>/i, replaceTagsAndSpaces, parseBalance);
 	getParam(html, result, 'credits.limit', /(?:Сумма кредита|Первоначальная сумма)[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalance);
@@ -445,7 +605,7 @@ function processMetalAccount(html, result){
 	getParam(html, result, 'accounts_met.weight', /"overallAmount"([^>]*>){2}/i, replaceTagsAndSpaces, parseBalance);
 	getParam('г.', result, ['accounts_met.weight_units', 'accounts_met.weight']);
     getParam(html, result, 'accounts_met.balance', /По курсу покупки Банка:([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-    getParam(html, result, ['accounts_met.currency', 'accounts_met.balance'], /По курсу покупки Банка:([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseCurrency);
+    getParam(html, result, ['accounts_met.currency', 'accounts_met.balance'], /По курсу покупки Банка:([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, myParseCurrency);
     getParam(html, result, 'accounts_met.date_start', /Открыт:[\s\S]*?<td[^>]*>([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseDateWord);
 
     if(AnyBalance.isAvailable('accounts_met.transactions')){
@@ -510,21 +670,35 @@ function processRates(baseurl, result) {
 	if(AnyBalance.isAvailable('eurPurch', 'eurSell', 'usdPurch', 'usdSell')){
 		AnyBalance.trace('Fetching rates...');
 		var html = AnyBalance.requestGet(baseurl + '/PhizIC/clientapi/private/rates/list.do?amountRate=true');
-		getParam(html, result, 'eurPurch', /"currencyRateName"[^>]*>\s*Евро(?:[\s\S]*?<div[^>]+rateText[^>]*>){1}([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'eurSell', /"currencyRateName"[^>]*>\s*Евро(?:[\s\S]*?<div[^>]+rateText[^>]*>){2}([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'usdPurch', /"currencyRateName"[^>]*>\s*Доллар США(?:[\s\S]*?<div[^>]+rateText[^>]*>){1}([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'usdSell', /"currencyRateName"[^>]*>\s*Доллар США(?:[\s\S]*?<div[^>]+rateText[^>]*>){2}([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
+		var json = getJson(html);
+		
+		var rates = json.response.rates.rate;
+		
+		for(var i=0; i < rates.length; ++i){
+			var rate = json.response.rates.rate[i];
+		    var type = json.response.rates.rate[i].currencyRateType;
+			var from = json.response.rates.rate[i].from.code;
+			var to = json.response.rates.rate[i].to.code;
+			if (type == 'BUY_REMOTE' && from == 'RUB' && to == 'USD')
+				getParam(rate.from.amount, result, 'usdPurch', null, null, parseBalance);
+			if (type == 'SALE_REMOTE' && from == 'USD' && to == 'RUB')
+				getParam(rate.to.amount, result, 'usdSell', null, null, parseBalance);
+			if (type == 'BUY_REMOTE' && from == 'RUB' && to == 'EUR')
+				getParam(rate.from.amount, result, 'eurPurch', null, null, parseBalance);
+			if (type == 'SALE_REMOTE' && from == 'EUR' && to == 'RUB')
+				getParam(rate.to.amount, result, 'eurSell', null, null, parseBalance);
+	    }
 	}
 }
 
 function fetchNewThanks(baseurl, result) {
-	AnyBalance.trace('Попробуем получить Спасибо от сбербанка...');
+	AnyBalance.trace('Попробуем получить Спасибо от СберБанка...');
 	if (AnyBalance.isAvailable('spasibo')) {
 		html = AnyBalance.requestGet(baseurl + '/PhizIC/clientapi/private/profile/loyaltyURL.do');
 		var href = getParam(html, /^{"response":{"url":"(https:\/\/[^"]*)"/i, replaceTagsAndSpaces);
 		if (href) href = getParam(href, /sat=([^"]*)/, replaceTagsAndSpaces);
 		if (!href) {
-			AnyBalance.trace('Не удаётся получить ссылку на спасибо от сбербанка: ' + html);
+			AnyBalance.trace('Не удаётся получить ссылку на спасибо от СберБанка: ' + html);
 		} else {
 			html = AnyBalance.requestGet('https://bonus-spasibo.ru/sbrf-mobile/api/participant/info?sat='+href);
 			if(/Sberbank-spasibo - Подтверждение телефона/i.test(html)){
@@ -576,6 +750,40 @@ function parseSmallDateInternal(str) {
 	}
 }
 
+function processAccountLast10Transactions(pageToken, result) {
+	if(!AnyBalance.isAvailable('accounts.transactions10'))
+		return;
+
+	var _id = result.__id;
+	AnyBalance.trace('Получаем последние 10 операций по счету...');
+	
+	html = AnyBalance.requestGet(nodeUrl + '/PhizIC/private/accounts/operations.do?id=' + _id);
+	
+	if(!/<table[^>]*class="tblInf"/i.test(html)) {
+	    AnyBalance.trace(html);
+	    AnyBalance.trace('Не удалось найти таблицу операций!');
+		return;
+	}
+
+    result.transactions10 = [];
+	
+    var ops = getElements(html, /<tr[^>]*class="ListLine\d+"/ig);
+	
+    AnyBalance.trace('У счета ' + _id + ' найдено транзакций: ' + ops.length);
+    for(var i=0; i<ops.length; ++i){
+    	var o = {};
+
+		getParam(ops[i], o, 'accounts.transactions10.sum', /(?:[\s\S]*?<td[^>]*>){3}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalanceSilent);
+		getParam(ops[i], o, 'accounts.transactions10.currency', /(?:[\s\S]*?<td[^>]*>){3}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, myParseCurrency);
+		getParam(ops[i], o, 'accounts.transactions10.descr', /(?:[\s\S]*?<td[^>]*>){1}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
+    	getParam(ops[i], o, 'accounts.transactions10.date', /(?:[\s\S]*?<td[^>]*>){2}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseSmallDateSilent);
+
+    	result.transactions10.push(o);
+    }
+	
+	result.transactions10 = sortObject(result.transactions10, 'time');
+}
+
 function processCardLast10Transactions(result) {
 	if(!AnyBalance.isAvailable('cards.transactions10'))
 		return;
@@ -583,7 +791,7 @@ function processCardLast10Transactions(result) {
 	var _id = result.__id;
 	AnyBalance.trace('Получаем последние 10 операций по карте...');
 	
-	html = AnyBalance.requestGet(nodeUrl + '/PhizIC/private/cards/info.do?id=' + _id);
+	html = AnyBalance.requestGet(nodeUrl + '/PhizIC/private/cards/info.do?id=' + _id + '&innerTabClicked=true');
 	
 	if(!/<table[^>]*class="tblInf"/i.test(html)) {
 	    AnyBalance.trace(html);
@@ -600,7 +808,7 @@ function processCardLast10Transactions(result) {
     	var o = {};
 
 		getParam(ops[i], o, 'cards.transactions10.sum', /(?:[\s\S]*?<td[^>]*>){3}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseBalanceSilent);
-		getParam(ops[i], o, 'cards.transactions10.currency', /(?:[\s\S]*?<td[^>]*>){3}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseCurrencySilent);
+		getParam(ops[i], o, 'cards.transactions10.currency', /(?:[\s\S]*?<td[^>]*>){3}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, myParseCurrency);
 		getParam(ops[i], o, 'cards.transactions10.descr', /(?:[\s\S]*?<td[^>]*>){1}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces);
     	getParam(ops[i], o, 'cards.transactions10.date', /(?:[\s\S]*?<td[^>]*>){2}([\s\S]*?)<\/td>/i, replaceTagsAndSpaces, parseSmallDateSilent);
 

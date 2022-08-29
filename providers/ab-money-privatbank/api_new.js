@@ -62,9 +62,9 @@ function apiNew() {
     if (!data.firstInitTime) data.firstInitTime = +new Date;
     if (!data.pt) data.pt = generateUUID('24-4-4-4-12');
     if (!data.pass) data.token = '';
-    g_geaders['user-agent-mob'] = '{"appVersion":"6.27.00","biometric":false,"brand":"OnePlus","deviceModel":"ONEPLUS A5000|OnePlus","display":"ONEPLUS A5000_23_171031","firstInitTime":"' + data.firstInitTime + '","hardware":"qcom","imeiGenerate":"' + data.imei + '","industrialName":"OnePlus5","isRooted":false,"lang":"' + (prefs.lang | 'ru') + '","lat":"0.0","lng":"0.0","model":"ONEPLUS A5000","modelType":"Tablet","nfcHce":true,"osName":"AOS","osVersion":"7.1.1"}';
+    g_geaders['user-agent-mob'] = '{"appVersion":"6.37.00","biometric":false,"brand":"OnePlus","deviceModel":"ONEPLUS A5000|OnePlus","display":"ONEPLUS A5000_23_171031","firstInitTime":"' + data.firstInitTime + '","hardware":"qcom","imeiGenerate":"' + data.imei + '","industrialName":"OnePlus5","isRooted":false,"lang":"' + (prefs.lang | 'ru') + '","lat":"0.0","lng":"0.0","model":"ONEPLUS A5000","modelType":"Tablet","nfcHce":true,"osName":"AOS","osVersion":"7.1.1"}';
     if (data.token) {
-        AnyBalance.trace('Найден старый токен. Проверяем тоен.');
+        AnyBalance.trace('Найден старый токен. Проверяем...');
         try {
             var json = callAPI('cardslist', data);
             AnyBalance.trace('Токен в порядке');
@@ -191,7 +191,8 @@ function apiNew() {
     if (cards.length > 1) {
         var cardsData = [];
         cards.forEach(c => {
-            if (c.id != bonusCard[0].id) cardsData.push(readCard(c, result, prefs, data))
+        //    if (c.id != bonusCard[0].id) 
+        cardsData.push(readCard(c, result, prefs, data))
         });
         if (isAvailable('info')) {
             var info = cardsData.filter(cd => cd.info).map(cd => cd.name + '<br>' + cd.number + '<br>' + cd.info).join('<br>')
@@ -404,12 +405,16 @@ function loginSite(prefs, data) {
             i++;
             return i + '.' + (j.card_currency != 'UAH' ? j.card_currency + ' ' : '') + j.card_name + ' (' + j.card_mask + ')'
         }).join('\n');
-        var cardNum = parseInt(AnyBalance.retrieveCode('Введите номер карты, от которой Вы помните PIN-код\n' + cards, null, {
+        var cardNum = parseInt(AnyBalance.retrieveCode('Выберите карту, от которой Вы помните PIN-код\n' + cards+'\nВведите число от 1 до '+i, null, {
             time: 60000,
             inputType: 'number',
             minLength: 1,
             maxLength: 2,
         })) - 1;
+        if (!json.data.cardlist[cardNum]) {
+        	Anybalance.trace('Введено "'+cardNum+'" при выборе от 1 до '+i);
+        	throw new AnyBalance.Error("Карта для ввода PIN не найдена", false, true);
+        	}
         var pin = AnyBalance.retrieveCode('Введите PIN-код, от карты\n' + (json.data.cardlist[cardNum].card_currency != 'UAH' ? json.data.cardlist[cardNum].card_currency + ' ' : '') + json.data.cardlist[cardNum].card_name + ' (' + json.data.cardlist[cardNum].card_mask + ')\nОсталось попыток:' + json.data.check_pin_counter, null, {
             time: 60000,
             inputType: 'number',
