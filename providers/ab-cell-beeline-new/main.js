@@ -58,6 +58,7 @@ function initialize(baseurl){
 var g_countersTable = {
 	common: {
 		"balance": "balance",
+		"addon_balance": "addon_balance",
 		"prebal": "prebal",
 		"overpay": "overpay",
 		"credit": "credit",
@@ -84,9 +85,12 @@ var g_countersTable = {
 		"min_local_till": "remainders.min_local_till",
 		"services_abon": "services_abon",
 		"services_count": "services_count",
+		"services_paid": "services_paid",
+		"services_free": "services_free",
 		"last_pay_date": "payments.date",
 		"last_pay_sum": "payments.sum",
 		"last_pay_place": "payments.place",
+		"statuslock": "statuslock",
 		"__tariff": "tariff"
 	}
 };
@@ -136,5 +140,3 @@ function proceedWithMobileAppAPI(baseurl){
 
 	AnyBalance.setResult(newresult);
 }
-
-

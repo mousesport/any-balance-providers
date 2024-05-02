@@ -7,12 +7,17 @@ const BrowserAPI = (() => {
         url?: string
         resType?: string
         not?: boolean
-        action: 'abort'|'continue'|'request'
+        action: 'abort'|'continue'|'request'|'cache'
+        valid: number //for 'cache' in milliseconds
     }
 
     type Options = {
+        provider: string
         debug?: boolean
         userAgent: string,
+        singlePage?: boolean,
+        incognito?: boolean, //По умолчанию true
+        headful?: boolean,
         rules?: RuleSource[]
         additionalRequestHeaders: {
             url?: RegExp,
@@ -30,8 +35,8 @@ const BrowserAPI = (() => {
         requestAPI(verb, json) {
             const browserApi = this.options.debug ? browserApiDebug : browserApiRelease;
             const html = json
-                ? AnyBalance.requestPost(browserApi + '/' + verb, JSON.stringify(json), {"Content-Type": "application/json"})
-                : AnyBalance.requestGet(browserApi + '/' + verb + (verb.indexOf('?') >= 0 ? '&' : '?') + '_=' + (+new Date()));
+                ? AnyBalance.requestPost(browserApi + '/' + verb, JSON.stringify(json), {"Referer": this.options.provider + '', "Content-Type": "application/json"})
+                : AnyBalance.requestGet(browserApi + '/' + verb + (verb.indexOf('?') >= 0 ? '&' : '?') + '_=' + (+new Date()), {"Referer": this.options.provider + ''});
             const ret = JSON.parse(html);
             if (ret.status !== 'ok') {
                 AnyBalance.trace(html);
@@ -44,6 +49,8 @@ const BrowserAPI = (() => {
         open(url) {
             const ret = this.requestAPI('base/open', {
                 userAgent: this.options.userAgent,
+                singlePage: this.options.singlePage,
+                headful: this.options.headful,
                 url: url,
                 rules: this.options.rules
             })
@@ -65,7 +72,10 @@ const BrowserAPI = (() => {
                         const pr = json.pendingRequests[j];
                         const headers = [];
                         for (let name in pr.headers) {
-                            const values = pr.headers[name].split('\n');
+                            const hv = pr.headers[name];
+			    if(hv.trim() === '')
+				continue;
+                            const values = hv.split('\n');
                             for (let i = 0; i < values.length; ++i)
                                 headers.push([name, values[i]]);
                         }
@@ -76,7 +86,7 @@ const BrowserAPI = (() => {
                                 const arh = this.options.additionalRequestHeaders[a];
                                 if(!arh.url || arh.url.test(pr.url)){
                                     const headerMatchCounts = this.headerMatchCounts;
-                                    if(arh.maxCount || (headerMatchCounts[a] || 0) < arh.maxCount) {
+                                    if(!arh.maxCount || (headerMatchCounts[a] || 0) < arh.maxCount) {
                                         additionalHeaders = arh.headers || {};
                                         if(arh.maxCount)
                                             headerMatchCounts[a] = (headerMatchCounts[a] || 0) + 1;
@@ -86,7 +96,7 @@ const BrowserAPI = (() => {
                             }
                         }
 
-                        const html = AnyBalance.requestPost(pr.url, pr.body, addHeaders(headers, additionalHeaders), {HTTP_METHOD: pr.method});
+                        const html = AnyBalance.requestPost(pr.url, pr.body, addHeaders(additionalHeaders, headers), {HTTP_METHOD: pr.method});
                         const params = AnyBalance.getLastResponseParameters();
                         const convertedHeaders = {};
                         let ct;

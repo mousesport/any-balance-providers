@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <history>
+	<change version="57" date="2023-11-01">
+	- Исправлено получение статуса блокировки
+	</change>
+	<change version="56" date="2023-07-05">
+	- Добавлены дополнительные счетчики
+	</change>
+	<change version="55" date="2022-10-25">
+	- Поддержка новой версии приложения
+	</change>
 	<change version="54" date="2022-02-14">
 	- Поддержка изменений на сайте
 	</change>

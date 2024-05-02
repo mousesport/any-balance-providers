@@ -114,41 +114,12 @@ function generateUUID () {
 }
 
 function main(){
-var g_headers = {
-'content-type':'application/json',
-accept:'application/vnd.qiwi.v1+json',
-'user-agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36',
-'client-software':'WEB v4.98.0',
-'x-application-id':'0ec0da91-65ee-496b-86d7-c07afc987007',
-'x-application-secret':'66f8109f-d6df-49c6-ade9-5692a0b6d0a1',
-'origin':'https://qiwi.com',
-'sec-fetch-site':'same-site',
-'sec-fetch-mode':'cors',
-'sec-fetch-dest':'empty',
-'referer':'https://qiwi.com/',
-'accept-encoding':'gzip, deflate, br'
-}
     var prefs = AnyBalance.getPreferences();
     AnyBalance.setDefaultCharset('utf-8');
-    AnyBalance.setOptions({cookiePolicy: 'netscape'});	
-var html=AnyBalance.requestGet('https://qiwi.com/payment/form/32558');
-AnyBalance.trace(html);
-var html=AnyBalance.requestPost('https://qiwi.com/oauth/token',{grant_type:'anonymous',client_id:'anonymous'});
-AnyBalance.trace(html);
-var json=getJson(html);
-g_headers.authorization='TokenHead '+json.access_token;
-var html=AnyBalance.requestPost('https://edge.qiwi.com/sinap/api/refs/d70e3628-ac4c-48ff-9e20-e7f04b4c9b81/containers',JSON.stringify({
-	account: prefs.num,
-	serviceType: 'account',
-	profileId: 'rostelecom'}),g_headers);
-AnyBalance.trace(html);
-	var json=getJson(html);
-	if (json.message) throw new AnyBalance.Error(json.message,false,true)
-	AnyBalance.setResult({success:true,balance:json.elements[0].value})
+	
+	getInfoByAlternative(prefs); // Пока получаем баланс альтернативным способом
+	
 	return;
-
-    var prefs = AnyBalance.getPreferences();
-    AnyBalance.setDefaultCharset('utf-8');
 
     if(AnyBalance.getLevel() < 4)
         throw new AnyBalance.Error('Этот провайдер требует API v.4+');
@@ -564,4 +535,73 @@ function getRTJson(text){
     if(json.isError)
         throw new AnyBalance.Error(json.errorMsg);
     return json;
+}
+
+function getInfoByAlternative(prefs){
+	checkEmpty(prefs.login, 'Введите логин!');
+	checkEmpty(/^\d+$/.test(prefs.login), 'Введите номер лицевого счета!');
+	
+	var headers = {
+	    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+	    'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8,ru-RU;q=0.7',
+	    'Cache-Control': 'max-age=0',
+	    'Connection': 'keep-alive',
+	    'Upgrade-Insecure-Requests': '1',
+	    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    };
+	
+    var html = AnyBalance.requestGet('https://platiuslugi.ru/', headers);
+    
+	if(AnyBalance.getLastStatusCode() >= 400){
+        AnyBalance.trace(html);
+        throw new AnyBalance.Error('Сайт провайдера временно недоступен. Попробуйте еще раз позже');
+    }
+	
+	html = AnyBalance.requestGet('https://platiuslugi.ru/oplata/rostelecom/', addHeaders({
+		'Referer': 'https://platiuslugi.ru/'
+	}), headers);
+	
+	var form = getElement(html, /<form[^>]+"rtelecom_mnt__CLIENTSresults"[^>]*>/i);
+	if(!form){
+		AnyBalance.trace(html);
+		throw new AnyBalance.Error('Не удалось найти форму входа. Сайт изменен?');
+	}
+	        
+	var params = createFormParams(form, function(params, str, name, value) {
+		if (name == 'db[fields][CUSTOMFIELD:a3_NUMBER_1_2]') {
+			return prefs.login;
+			
+		}
+	        
+		return value;
+	});
+	
+    params['clientID'] = new Date().getTime() + '' + (100000 + Math.floor(Math.random() * 900000)); // 1708642102136193349
+	
+	html = AnyBalance.requestPost('https://platiuslugi.ru/call_app/rtelecom_mnt::next_step/', params, addHeaders({
+    	'Accept': 'text/html, */*; q=0.01',
+		'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    	'Origin': 'https://platiuslugi.ru',
+        'Referer': 'https://platiuslugi.ru/oplata/rostelecom/',
+		'X-Requested-With': 'XMLHttpRequest'
+	}), headers);
+    
+    AnyBalance.trace('Ответ от внешней системы: ' + html);
+	
+	if(!/value="PAY"/i.test(html)){
+		var error = getParam(html, /<div[^>]+message error bg-info[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces);
+		if(error)
+			throw new AnyBalance.Error(error, null, /номер/i.test(error));
+		
+		AnyBalance.trace(html);
+		throw new AnyBalance.Error('Не удалось получить информацию о балансе. Сайт изменен?');
+	}
+	
+	var result = {success: true};
+	
+	getParam(html, result, 'balance', /a3_PA_BALANCE[\s\S]*?value="([^"]*)/i, replaceTagsAndSpaces, parseBalance);
+	result.__tariff = prefs.login;
+	result.licschet = prefs.login;
+		
+	AnyBalance.setResult(result);
 }

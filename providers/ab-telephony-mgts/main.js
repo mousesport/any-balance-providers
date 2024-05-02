@@ -2,12 +2,14 @@
 Провайдер AnyBalance (http://any-balance-providers.googlecode.com)
 */
 var g_headers = {
-	'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+	'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
 	'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.3',
-	'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4',
+	'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
 	'Connection': 'keep-alive',
-	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.82 Safari/537.36',
+	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
 };
+
+var replaceNumber = [replaceTagsAndSpaces, /\D/g, '', /.*(\d\d\d)(\d\d\d)(\d\d)(\d\d)$/, '+7 $1 $2-$3-$4'];
 
 function main() {
 	AnyBalance.setDefaultCharset("utf-8");
@@ -21,7 +23,7 @@ function main() {
 
 		html = AnyBalance.requestPost('https://1.elecsnet.ru/NotebookFront/services/0mhp/GetMerchantInfo', {
 		    merchantId:	'92',
-			paymentTool: '46',
+			paymentTool: '44',
 			'merchantFields[1]': prefs.login,
 			'merchantFields[2]': prefs.kvart || 13,
 		}, addHeaders({Referer: AnyBalance.getLastUrl(), 'X-Requested-With': 'XMLHttpRequest' }));
@@ -42,9 +44,9 @@ function main() {
 
 		if(/Баланс не может быть получен/i.test(json.message))
 			throw new AnyBalance.Error('Баланс временно недоступен. Попробуйте позднее или воспользуйтесь получением баланса по логину и паролю.');
-
-		getParam(json.message, result, 'balance', /Баланс:([^<]*)/i, null, parseBalance);
-		getParam(prefs.login, result, 'phone');
+		
+		getParam(json.message, result, 'balance', [/Баланс:([^<]*)/i], [/\=/g, '-'], parseBalance); // Eleksnet возвращает отрицательный баланс с "=" вместо "-"
+		getParam(prefs.login, result, 'phone', null, replaceNumber);
 
 	} else {
 		AnyBalance.trace('Входим по логину и паролю...');
@@ -78,6 +80,15 @@ function main() {
                 'LoginForm[password]': pin
 			}, addHeaders({Referer: 'https://auth.mgts.ru/login/b2c?feature=lk'}));
 			
+			if (/alert-danger/i.test(html)) {
+			    var error = getParam(html, null, null, /"alert-danger alert fade in"[^>]*>([^<]+)<\//i, replaceTagsAndSpaces);
+			    if (error)
+			    	throw new AnyBalance.Error(error, null, /неверный номер телефона|парол/i.test(error));
+			
+			    AnyBalance.trace(html);
+			    throw new AnyBalance.Error('Не удалось зайти в личный кабинет. Сайт изменен?');
+		    }
+			
 			var params = createFormParams(html, function(params, str, name, value) {
 				return value;
 			});
@@ -93,9 +104,9 @@ function main() {
 			throw new AnyBalance.Error('Не удалось зайти в личный кабинет. Сайт изменен?');
 		}
 		
-		getParam(getElement(html, /<div[^>]+account-info_title[^>]*>/i), result, 'fio', null, replaceTagsAndSpaces);
+		getParam(getElement(html, /<div[^>]+account-info_title[^>]*>/i), result, 'fio', null, replaceTagsAndSpaces, capitalFirstLetters);
 		getParam(html, result, 'balance', /<div[^>]+account-info_balance_value[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces, parseBalance);
-		getParam(html, result, 'phone', /Номер телефона:[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces);
+		getParam(html, result, 'phone', /Номер телефона:[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/i, replaceNumber);
 		getParam(html, result, 'licschet', /Лицевой счет:[\s\S]*?<div[^>]*>([\s\S]*?)<\/div>/i, replaceTagsAndSpaces);
 
 		var json = getJsonObject(html, /mgts.data.widgets\s*=\s*/);
@@ -118,7 +129,7 @@ function main() {
 		if(AnyBalance.isAvailable('bonus')){
 			html = AnyBalance.requestGet('https://lk.mgts.ru/bonus/', g_headers);
 			var info = getJsonObject(html, /mgts.data.bonusInfo/) || {};
-			getParam(info.Rest, result, 'bonus');
+			if(info && info.Rest) getParam(info.Rest, result, 'bonus');
 		}
 	}
 	

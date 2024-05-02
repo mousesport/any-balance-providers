@@ -3,11 +3,11 @@
 */
 
 var g_headers = {
-	'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+	'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
 	'Accept-Charset': 'windows-1251,utf-8;q=0.7,*;q=0.3',
-	'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4',
+	'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.7,en;q=0.4',
 	'Connection': 'keep-alive',
-	'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.76 Safari/537.36',
+	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36',
 };
 
 function main() {
@@ -20,31 +20,43 @@ function main() {
 
 function mainRussianPost() {
 	var prefs = AnyBalance.getPreferences();
+	
+	AnyBalance.setDefaultCharset('utf-8');
+	
 	AnyBalance.trace('Connecting to russianpost...');
 	var baseurl = 'https://www.pochta.ru/';
 	
-	var info = AnyBalance.requestGet(baseurl);
+	var info = AnyBalance.requestGet(baseurl + 'tracking', g_headers);
 	
-	info = AnyBalance.requestPost(baseurl + 'tracking', {
-		barcode: prefs.code
-	}, addHeaders({
-		Referer: baseurl
+	if(!info || AnyBalance.getLastStatusCode() >= 500){
+        AnyBalance.trace(info);
+        throw new AnyBalance.Error('Сайт провайдера временно недоступен. Попробуйте еще раз позже');
+    }
+	
+	if(/"csrfTokenEnabled":\s?true/i.test(info)){
+	    var csrf = getParam(info, /"csrfToken":"([^"]*)/i, replaceHtmlEntities);
+		g_headers['Csrf-Token'] = csrf;
+		
+		if(!csrf || AnyBalance.getLastStatusCode() == 403){
+            AnyBalance.trace(info);
+            throw new AnyBalance.Error('Не удалось найти токен авторизации. Сайт изменен?');
+        }
+	}
+	
+	info = AnyBalance.requestPost(baseurl + 'api/nano-apps/api/v1/tracking.get-by-barcodes?language=ru', JSON.stringify([prefs.code]), addHeaders({
+		'Accept': 'application/json',
+		'Content-Type': 'application/json',
+		'Referer': baseurl + 'tracking'
 	}));
-
-	var info = AnyBalance.requestGet(baseurl + 'tracking?p_p_id=trackingPortlet_WAR_portalportlet&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_resource_id=getList&p_p_cacheability=cacheLevelPage&p_p_col_id=column-1&p_p_col_pos=1&p_p_col_count=2&barcodeList=' + prefs.code + '&postmanAllowed=true&_=' + (+new Date()), 
-		addHeaders({
-			Referer: baseurl + 'tracking',
-			'X-Requested-With': 'XMLHttpRequest'
-		}));
 	
 	var result = {success: true};
 	
 	result.__tariff = prefs.code;
 	
 	var json = getJson(info);
+	AnyBalance.trace('Info: ' + JSON.stringify(json));
 	
-	
-	if(!json.list || !json.list[0]){
+	if(!json.detailedTrackings || !json.detailedTrackings[0]){
 		var error = json.error && json.error.description;
 		if(error)
 			throw new AnyBalance.Error(error, null, /barcode/i.test(error));
@@ -52,21 +64,31 @@ function mainRussianPost() {
 		throw new AnyBalance.Error('Информация о почтовом отправлении не найдена! Проверьте правильность ввода трек-номера: ' + prefs.code);
 	}
 
-    var jsonInfo = json.list[0];
-
+    var jsonInfo = json.detailedTrackings[0];
 	if(!jsonInfo.trackingItem || !jsonInfo.trackingItem.trackingHistoryItemList)
 		throw new AnyBalance.Error('Нет информации о прохождении посылки! Возможно, она появится позже.');
 	
-	var op = jsonInfo.trackingItem.trackingHistoryItemList[0];
+	var item = jsonInfo.trackingItem;
 	
-	getParam(op.date+'', result, ['date', 'fulltext'], null, replaceTagsAndSpaces, parseDateISO);
+	getParam(item.weight+'', result, 'weight', null, replaceTagsAndSpaces, parseBalance);
+	getParam(item.sender+'', result, 'sender', null, replaceTagsAndSpaces);
+	getParam(item.recipient+'', result, 'recipient', null, replaceTagsAndSpaces);
+	getParam(item.originCityName+'', result, 'from', null, replaceTagsAndSpaces);
+	getParam(item.destinationCityName+'', result, 'to', null, replaceTagsAndSpaces);
+	getParam(item.mailTypeText+'', result, 'type', null, replaceTagsAndSpaces);
+	getParam(item.mailRankText+'', result, 'rank', null, replaceTagsAndSpaces);
+	
+	var op = item.trackingHistoryItemList[0];
+	
 	getParam(op.humanStatus, result, ['operation', 'fulltext']);
+	getParam(op.date+'', result, ['time', 'fulltext'], null, replaceTagsAndSpaces, parseDateISO);
 	sumParam(op.cityName, result, ['location', 'fulltext'], null, null, null, aggregate_join);
 	sumParam(op.countryName, result, ['location', 'fulltext'], null, null, null, aggregate_join);
 	sumParam(op.index, result, ['location', 'fulltext'], null, null, null, aggregate_join);
 	getParam(op.description, result, ['attribute', 'fulltext']);
+	getParam(op.countryCustomName, result, ['operator', 'fulltext']);
 //	getParam(op.Payment+'', result, 'addcost', null, replaceTagsAndSpaces, parseBalance);
-	getParam('<small>' + getFormattedDate(null, new Date(result.date)) + '</small>: <b>' + result.operation + '</b><br/>' + result.location + '<br/>' + result.attribute + (result.addcost ? ', Н/п ' + result.addcost + 'р' : ''), result, 'fulltext');
+	getParam(getFormattedDate(null, new Date(result.time)) + ': ' + result.operation + ',<br/>' + result.location + ',<br/>' + result.attribute + (result.addcost ? ', Н/п ' + result.addcost + ' ₽' : ''), result, 'fulltext');
 	
 	AnyBalance.setResult(result);
 }

@@ -2,24 +2,23 @@
 <PreferenceScreen>
 	<EditTextPreference
 		obligatory="true"
-		title="E-mail/№ карты"
+		title="Логин"
 		positiveButtonText="ОК"
-		summary="||{@s}"
-		dialogTitle="E-mail/№ карты"
+		summary="Логин для входа в личный кабинет|Введите логин\n|{@s}\n"
+		dialogTitle="Логин"
 		negativeButtonText="Отмена"
-		dialogMessage="Введите номер карты или e-mail для входа в личный кабинет S7."
-		inputType="textEmailAddress"
+		dialogMessage="Введите логин, используемый для входа в личный кабинет"
 		key="login">
 	</EditTextPreference>
 	<EditTextPreference
 		obligatory="true"
 		positiveButtonText="ОК"
 		key="password"
-		dialogTitle="Пароль/ПИН"
+		dialogTitle="Пароль"
 		negativeButtonText="Отмена"
-		title="Пароль/ПИН"
-		summary="||***********"
-		dialogMessage="Введите ПИН или пароль, используемый для входа в личный кабинет S7."
+		title="Пароль"
+		summary="Пароль для входа в личный кабинет|Введите пароль\n|***********\n"
+		dialogMessage="Введите пароль, используемый для входа в личный кабинет"
 		inputType="textPassword">
 	</EditTextPreference>
 </PreferenceScreen>

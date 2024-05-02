@@ -1,26 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <provider>
+	<id version="8">ab-bonus-uralair</id>
+	<name>Уральские авиалинии</name>
 	<api flags="no_browser" />
-	<id version="6">ab-bonus-uralair</id>
-	<name>Программа "Крылья", Уральские Авиалинии</name>
 	<description html="true"><![CDATA[
-	<p>Получает баланс баллов и другую информацию по бонусной программе "Крылья" Уральских Авиалиний (http://www.uralairlines.ru).</p>
-	<p>Информация берется из личного кабинета https://loyalty.uralairlines.ru.</p>
-	<p>Если у вас ещё нет ПИН-кода для входа в личный кабинет, получите его на этой странице: https://loyalty.uralairlines.ru/ru/register/forget</p>
+	<p>Получает баланс баллов и другую информацию по бонусной программе "Крылья" Уральских авиалиний (https://www.uralairlines.ru).</p>
+	<p>Информация берется из личного кабинета https://www.uralairlines.ru/cabinet/.</p>
 	]]></description>
-	<author>Dmitry Kochin &lt;dco@mail.ru&gt;</author>
+	<instruction html="true"><![CDATA[
+	<p>Для работы провайдера требуется ввести логин и пароль для входа в личный кабинет Уральских авиалиний.</p>
+	]]></instruction>
+	<author>AnyBalance Team &lt;info@anybalance.ru&gt;</author>
+	<depends>
+		<module id="library"/>
+		<module id="misc/saved-data"/>
+	</depends>
 	<files>
-		<icon>icon.png</icon>
+	    <icon>icon.png</icon>
 		<preferences>preferences.xml</preferences>
-		<js>library.js</js>
 		<js>main.js</js>
 		<history>history.xml</history>
 	</files>
 	<counters>
-		<counter id="balance" name="Баланс" units=" Бр"/>
+		<counter id="balance" name="Баланс" units=" Б"/>
+		<counter id="q_points" name="Квалификационные баллы" units=" КБ"/>
+		<counter id="q_fligts" name="Квалификационные полеты" units=" КП"/>
+		<counter id="bonuses_burn" name="Сгораемые баллы" units=" Б"/>
+		<counter id="bonuses_till" name="Дата сгорания баллов" type="time" format="dd.MM.yyyy"/>
 		<counter id="cardnum" name="Номер карты" type="text"/>
-		<counter id="fio" name="ФИО" type="text"/>
+		<counter id="curr_level" name="Текущий уровень" type="text"/>
+		<counter id="level_exp_date" name="Срок действия уровня" type="time" format="dd.MM.yyyy"/>
+		<counter id="on_level" name="Количество полетов" units=" П"/>
+		<counter id="coins_on_level" name="Сумма за перелеты" units=" ₽"/>
+		<counter id="next_level" name="Следующий уровень" type="text"/>
+		<counter id="to_next_level" name="Полетов до след. уровня" units=" П"/>
+		<counter id="coins_to_next_level" name="Сумма до след. уровня" units=" ₽"/>
+		<counter id="last_oper_sum" name="Сумма посл. операции" units=" Б"/>
+		<counter id="last_oper_date" name="Дата посл. операции" type="time" format="dd.MM.yyyy"/>
+		<counter id="last_oper_type" name="Тип посл. операции" type="text"/>
+		<counter id="last_oper_desc" name="Описание посл. операции" type="text"/>
 		<counter id="city" name="Город" type="text"/>
+		<counter id="email" name="E-mail" type="text"/>
+		<counter id="phone" name="Телефон" type="text"/>
+		<counter id="fio" name="ФИО" type="text"/>
 	</counters>
 	<keywords>ural airlines</keywords>
 	<type>bonus</type>

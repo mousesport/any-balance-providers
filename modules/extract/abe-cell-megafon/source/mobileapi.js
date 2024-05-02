@@ -17,6 +17,7 @@ var replaceNumber = [replaceTagsAndSpaces, /\D/g, '', /.*(\d\d\d)(\d\d\d)(\d\d)(
 /** API Megafon LK*/
 function callAPI(method, url, params, allowerror) {
     var html;
+	AnyBalance.trace('Запрос: ' + api_url + url);/////////////////////////////////////
     if(method == 'post') {
         if(typeof(params) == 'string')
             html = AnyBalance.requestPost(api_url + url, params, addHeaders({'Content-Type': 'application/json; charset=utf-8'}, g_api_headers));
@@ -24,7 +25,7 @@ function callAPI(method, url, params, allowerror) {
             html = AnyBalance.requestPost(api_url + url, params, g_api_headers);
     }else
         html = AnyBalance.requestGet(api_url + url, g_api_headers);
-
+    
     var json = {};
     if(html){
         try{
@@ -33,7 +34,7 @@ function callAPI(method, url, params, allowerror) {
             json = getJsonEval(html);
         }
     }
-
+    AnyBalance.trace('Ответ: ' + JSON.stringify(json));/////////////////////////////////////
     if(json.code === 'a216'){ //Аккаунт заблокирован, надо явно его разблокировать через ussd или поддержку
     	throw new AnyBalance.Error(json.message, null, true);
     }
@@ -228,11 +229,13 @@ function megafonLkAPIDo(options, result) {
             
             getParam(json.outcome + '', result, 'sub_scl', null, replaceTagsAndSpaces, parseBalance);
         }catch(e){
-            AnyBalance.trace('Ошибка получения информации о звонках: ' + e.message + '\n' + e.stack);
+            AnyBalance.trace('Ошибка получения информации о расходах: ' + e.message + '\n' + e.stack);
         }
     }
 
     processInfoApi(result);
+	
+	processAddNumApi(result);
 
     if(AnyBalance.isAvailable('detalization'))
         processDetalizationApi(result);
@@ -390,7 +393,7 @@ function processRemaindersApi(result){
 								getParam(current.available + current.unit, remainders, 'remainders.internet_roam_europe', null, replaceTagsAndSpaces, parseTraffic);
 						}else if(/Автопродление/i.test(name)) {
 								getParam(current.available + current.unit, remainders, 'remainders.internet_auto_prolong', null, replaceTagsAndSpaces, parseTraffic);
-						}else if(/Интернет в Крыму/i.test(name)) {
+						}else if(/Интернет в (?:Крыму|поездке)/i.test(name)) {
 								getParam(current.available + current.unit, remainders, 'remainders.internet_left_crimea', null, replaceTagsAndSpaces, parseTraffic);
                         } else {
                             var suffix = '';
@@ -447,9 +450,39 @@ function processInfoApi(result){
         getParam(json.birthdate, info, 'info.birthday', null, null, parseDate);
         getParam(json.email, info, 'info.email');
         getParam(json.name, info, 'info.fio');
+		getParam(json.accountNumber, info, 'info.license');
         getParam(json.region.id, info, 'info.region_id');
         getParam(json.region.name, info, 'info.region_name');
+		var filial = {100: 'nw', 200: 'mos', 300: 'ctr', 400: 'kv', 500: 'vlg', 600: 'url', 700: 'sib', 800: 'dv'};
+		getParam(filial[json.region.id]||json.region.id, info, 'info.filial');
     }
+	
+	if(AnyBalance.isAvailable('license') && !info.license){
+		var json = callAPI('get', 'api/profile/accountNumber');
+		
+        getParam(json.accountNumber, info, 'info.license');
+    }
+}
+
+function processAddNumApi(result){
+	if(!AnyBalance.isAvailable('add_num', 'add_num1', 'add_num2'))
+        return;
+
+    var json = callAPI('get', 'api/additionalNumbers/list');
+		
+	if(json.additionalNumbersList && json.additionalNumbersList.length > 0){
+		AnyBalance.trace('Найдено доп. номеров: ' + json.additionalNumbersList.length);
+		for(var i = 0; i<json.additionalNumbersList.length; i++){
+			var num = (i >= 1 ? 'add_num' + (i + 1) : 'add_num');
+			var prefix = (i >= 1 ? 'add_num_prefix' + (i + 1) : 'add_num_prefix');
+			var charge = (i >= 1 ? 'add_num_charge' + (i + 1) : 'add_num_charge');
+		   	getParam(json.additionalNumbersList[i].number, result, num, null, replaceNumber);
+			getParam(json.additionalNumbersList[i].prefix, result, prefix);
+			getParam(json.additionalNumbersList[i].dailyCharge, result, charge);
+		}
+	}else{
+		AnyBalance.trace('Не удалось получить список доп. номеров: ' + JSON.stringify(json));
+	}
 }
 
 function processSmsTurnOffApi(){
@@ -476,10 +509,34 @@ function processSmsTurnOffApi(){
 }
 
 function processServices(result){
-	if(!AnyBalance.isAvailable('services_free', 'services_paid'))
+	if(!AnyBalance.isAvailable('services_free', 'services_paid', 'services_count', 'services_abon', 'statuslock'))
 		return;
 
     var json = callAPI('get', 'api/options/list/current');
+	
     getParam(json.free ? json.free.length : 0, result, 'services_free');
     getParam(json.paid ? json.paid.length : 0, result, 'services_paid');
+	getParam((json.free ? json.free.length : 0) + (json.paid ? json.paid.length : 0), result, 'services_count');
+	getParam(0, result, 'services_abon');
+	getParam('Номер не блокирован', result, 'statuslock');
+	
+	// Добровольная блокировка номера - платная услуга, проверяем её наличие в подключённых платных
+	if(json.paid && json.paid.length > 0){
+	    for(var i=0; i<json.paid.length; ++i){
+	    	var s = json.paid[i];
+			var dt = new Date();
+            
+		    if(s.monthly !== true){
+                var sp = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate(); // Дней в этом месяце
+            }else{
+                var sp = 1;
+            }
+		    AnyBalance.trace('Платная услуга ' + s.optionName + ': ' + s.fees[0]);
+		    sumParam(s.monthRate*sp, result, 'services_abon', null, null, null, aggregate_sum);
+			
+			if(/Блокировка номера/i.test(s.optionName)){
+                getParam('Номер заблокирован', result, 'statuslock');
+            }
+	    }
+	}
 }

@@ -33,7 +33,31 @@ function main() {
     var json = getJson(html);
     AnyBalance.trace(JSON.stringify(json));
 
-    var id = getParam(html, null, null, /^\{["']+(\d+)/i, [/\D/g, '']);
+    if(prefs.country){
+		AnyBalance.trace('Регион или название страны указаны в настройках (' + prefs.country + '). Ищем ID города ' + prefs.city + ' по указанным данным');
+		var objs = JSON.stringify(json).match(/"'+\d+[\s\S]*?span[^>]*>[\s\S]*?"/ig);
+		
+		if(objs && objs.length > 0){
+			for(var i=0; i<objs.length; i++){
+				var obj = objs[i];
+				if(obj.includes(prefs.country)){
+					AnyBalance.trace(obj);
+				    var id = getParam(obj, null, null, /^["']+(\d+)/i, [/\D/g, '']);
+					break;
+				}else{
+                    continue;
+				}
+			}
+		}
+		
+		if(!id){
+		    AnyBalance.trace('Точных соответствий по указанным данным не найдено. Ищем ID города ' + prefs.city + ' обычным способом');
+		    var id = getParam(html, null, null, /^\{["']+(\d+)/i, [/\D/g, '']);
+		}
+	}else{
+		AnyBalance.trace('Регион или название страны не указаны в настройках. Ищем ID города ' + prefs.city + ' обычным способом');
+		var id = getParam(html, null, null, /^\{["']+(\d+)/i, [/\D/g, '']);
+	}
 
     checkEmpty(id, 'Не удалось найти ID города ' + prefs.city, true);
     AnyBalance.trace('Нашли ID города ' + prefs.city + ': ' + id);
@@ -75,7 +99,7 @@ function main() {
 function getWeatherFromHTML(prefs) {
   var baseurl = 'https://www.gismeteo.' + prefs.domen + '/city/daily/';
 
-  AnyBalance.trace('Trying open address: ' + baseurl + prefs.city + '/');
+  AnyBalance.trace('Пробуем перейти по адресу: ' + baseurl + prefs.city + '/');
   var html = AnyBalance.requestGet(baseurl + prefs.city + '/');
 
   // Проверка неправильной пары логин/пароль
@@ -91,10 +115,10 @@ function getWeatherFromHTML(prefs) {
   }
 
   if (/(почасовой прогноз погоды|давление и влажность|Prognozė kas valandą)/i.test(html)) {
-    AnyBalance.trace('It looks like we are in selfcare...');
+    AnyBalance.trace('Похоже, мы уже на странице прогноза');
   } else {
-    AnyBalance.trace('Have not found weather info... Unknown error. Please contact author.');
-    throw new AnyBalance.Error('Не удалось найти прогноз погоды. Сайт изменён?');
+    AnyBalance.trace(html);
+    throw new AnyBalance.Error('Не удалось найти прогноз погоды. Сайт изменен?');
   }
 
   var result = {success: true};
@@ -114,7 +138,7 @@ function getWeatherFromHTML(prefs) {
   getParam(html, result, 'dayLength', /Долгота[^\d]*(\d+\s*(?::|ч)\s*\d+)/i, [/\s*ч\s*/i, ':'], parseMinutes);
   // Фаза Луны
   getParam(html, result, 'moonPhase', [/Фаза[^\d]*((\d+%)[\s\S]*?<span[^>]+class="astronomy_title">([^<]*))/i, /<div[^>]+moon[^>]*>(?:[^>]*>){8}([^<]*)/i], [
-    /(\d+%)[\s\S]*?<span[^>]+class="astronomy_title">([^<]*)/, '$2 $1', replaceTagsAndSpaces]);
+    /(\d+%)[\s\S]*?<span[^>]+class="astronomy_title">([^<]*)/, '$2, $1', replaceTagsAndSpaces]);
 
   return result;
 }
@@ -128,11 +152,11 @@ function getCurrentWeather(html, result) {
   // Атмосферное давление
   getParam(html, result, 'pressure', [/class='value m_press torr'>(\d+)/i, /<div[^>]+info[^>]*>Давление(?:[^>]*>){3}(\d+)/i], [], parseInt);
   // Ветер
-  getParam(html, result, 'wind', [/<dd[^>]* ms'[^>]*>((\d+)[\s\S]*?<dt>([^<]*))/i, /<div[^>]+information\s*_additional[^>]*>(?:[^>]*>){4}([\s\S]*?)<\/div>/i], [/(\d+)[\s\S]*?<dt>([^<]*)/, '$2 $1м/с', replaceTagsAndSpaces]);
+  getParam(html, result, 'wind', [/<dd[^>]* ms'[^>]*>((\d+)[\s\S]*?<dt>([^<]*))/i, /<div[^>]+information\s*_additional[^>]*>(?:[^>]*>){4}([\s\S]*?)<\/div>/i], [/(\d+)[\s\S]*?<dt>([^<]*)/, '$2, $1 м/с', replaceTagsAndSpaces]);
   // Влажность
   getParam(html, result, 'humidity', [/title="Влажность">(\d+)/i, /<div[^>]+info[^>]*>влажность(?:[^>]*>){3}(\d+)/i], [], parseInt);
   // Время обновления
-  getParam(html, result, 'time', /class="icon date">([^<]*)/i, [/(\d{1,2})\s+(\S+)\s+(\d{4})\s+(.*)/, '$3/$2/$1 $4',
+  var a = getParam(html, result, 'time', /class="icon date"[^>]*>([^<]*)/i, [/(\d{1,2})\s+(\S+)\s+(\d{4})\s+(.*)/, '$1/$2/$3 $4',
       'января', '01',
       'февраля', '02',
       'марта', '03',
@@ -144,9 +168,8 @@ function getCurrentWeather(html, result) {
       'сентября', '09',
       'октября', '10',
       'ноября', '11',
-      'декабря', '12'
-    ],
-    Date.parse);
+      'декабря', '12',
+	replaceTagsAndSpaces], parseDate);
 
   return result;
 }
@@ -185,14 +208,12 @@ function getWeatherForecast(html, result, tod) {
     getParam(tr, result, 'atmosphericConditions', /"cltext"[^>]*>([^<]+)/i, replaceTagsAndSpaces, html_entity_decode);
     getParam(tr, result, 'temperature', /temp\s*c[^>]*>([^<]+)/i, replaceTagsAndSpaces, parseBalance);
     getParam(tr, result, 'pressure', /m_press torr[^>]*>([^<]+)/i, replaceTagsAndSpaces, parseBalance);
-    getParam(tr, result, 'wind', /wind[^>]*>([\s\S]*?)<\/span/i, [replaceTagsAndSpaces, /([\s\S]*)/i, '$1 м/с'], html_entity_decode);
+    getParam(tr, result, 'wind', /wind[^>]*>([\s\S]*?)<\/span/i, [/<dt[^>]*>(\S+)<\/[\s\S]*>([\s\S]*?)$/i, '$1, $2 м/с', replaceTagsAndSpaces], html_entity_decode);
     getParam(tr, result, 'humidity', /<td>(\d+)<\/td>/i, replaceTagsAndSpaces, parseBalance);
     getParam(tr, result, 'heat', /m_temp c[^>]*>([^<]+)/i, replaceTagsAndSpaces, parseBalance);
-    getParam(tr, result, 'time', /Local:\s*(\d{4}-\d{2}-\d{2}\s+\d+:\d{2})/i, [/(\d{4})-(\d{2})-(\d{2})\s+(\d+:\d{2})/, '$3/$2/$1 $4'],
-      parseDate);
+    getParam(tr, result, 'time', /Local:\s*(\d{4}-\d{2}-\d{2}\s+\d+:\d{2})/i, [/(\d{4})-(\d{2})-(\d{2})\s+(\d+:\d{2})/, '$3/$2/$1 $4', replaceTagsAndSpaces], parseDate);
   }
 
   return result;
-
 
 }

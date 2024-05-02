@@ -34,7 +34,7 @@ function requestApiInner(url, params, no_default_params, ignoreErrors) {
 		newParams = joinObjects(params, {
 			'version':'9.20',
 			'appType':'android',
-			'appVersion':'11.13.0',
+			'appVersion':'15.3.0',
 			'deviceName':'SM-G973',
 		});
 	}
@@ -44,7 +44,7 @@ function requestApiInner(url, params, no_default_params, ignoreErrors) {
 
 	var code = getParam(html, null, null, /<status>\s*<code>\s*(-?\d+)\s*<\/code>/i, null, parseBalance);
 	
-	if(!/<status>\s*<code>\s*0\s*<\/code>/i.test(html)) {
+	if(!/<status>\s*<code>\s*0\s*<\/code>/i.test(html) && !/loyaltyURL.do/i.test(url)) { // Запрос Спасибо частенько глючит, не будем из-за него бросать Error
 		AnyBalance.trace(html);
 		if(!ignoreErrors){
 			var error = sumParam(html, null, null, /<error>\s*<text>\s*(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?\s*<\/text>\s*<\/error>/ig, replaceTagsAndSpaces, null, aggregate_join);
@@ -134,7 +134,7 @@ function createSdkData(){
 		"TimeZone":"0",
 		"SupportedAPILevel":"28",
 		"OSCodeName":"Android Pie",
-		"AgentAppInfo":"СберБанк 11.13.0",
+		"AgentAppInfo":"СберБанк 15.3.0",
 		"ApprepInstalledApps":"114",
 		"OSFontsNumber":"234",
 		"OSFontsHash":-1313735598,
@@ -559,14 +559,17 @@ function processThanksAPI(result){
 		AnyBalance.trace('Fetching bonuses...');
 		var html = requestApi('private/profile/loyaltyURL.do');
 		
-		var url = getParam(html, null, null, /<url>([^<]{10,})/i, replaceTagsAndSpaces);
-		var sat = getParam(url, null, null, /sat=([\s\S]*)/i, replaceTagsAndSpaces);
-		if(sat) {
-			html = AnyBalance.requestGet('https://bonus-spasibo.ru/sbrf-mobile/api/participant/info?sat=' + sat);
+		result.spasibo = null;
+		var sat = getParam(html, null, null, /<url>[\s\S]*?sat=([\s\S]*)<\/url>/i, replaceTagsAndSpaces);
+		if(!sat){
+			AnyBalance.trace('Не удалось найти ссылку на программу Спасибо: ' + html);
+			return;
+		}
+		
+		html = AnyBalance.requestGet('https://bonus-spasibo.ru/sbrf-mobile/api/participant/info?sat=' + sat);
+		if(/"balance":/i.test(html)){
 			var json = getJson(html);
 			getParam(json.balance / 100, result, 'spasibo', null, null, parseBalance);
-		} else {
-			AnyBalance.trace("Не удалось найти ссылку на программу спасибо, сайт изменен?");
 		}
 	}
 }

@@ -4,7 +4,7 @@
 
 var g_headers = {
 	'Connection':'keep-alive',
-	'Tele2-User-Agent': '"mytele2-app/4.10.0"; "unknown"; "Android/9"; "Build/12998710"',
+	'Tele2-User-Agent': '"mytele2-app/4.27.1"; "unknown"; "Android/9"; "Build/12998710"',
 	'X-API-Version': '3',
 	'User-Agent':'okhttp/4.2.0'
 };
@@ -181,7 +181,7 @@ function processBalance(result){
 
     var subsid = getSubscriberId();
 
-    AnyBalance.trace('Получаем баланс');
+    AnyBalance.trace('Получаем баланс и тариф');
 
     var maxTries = 3;
 
@@ -237,22 +237,22 @@ function processRemainders(result){
     if (!AnyBalance.isAvailable('remainders'))
         return;
 
-    AnyBalance.trace('Получаем остатки услуг');
+    AnyBalance.trace('Получаем остатки по услугам');
 
     try {
         if(!result.remainders)
             result.remainders = {};
 
         var subsid = getSubscriberId();
-
-        AnyBalance.trace("Searching for resources left");
+		
+		AnyBalance.trace('Пытаемся получить остатки по услугам');
         var html = AnyBalance.requestGet(baseurl + "api/subscribers/" + subsid + '/rests', addHeaders({
         	Accept: '*/*',
         	'X-Requested-With': 'XMLHttpRequest',
         	Referer: baseurl
         }));
 
-        AnyBalance.trace('Got discounts: ' + html);
+        AnyBalance.trace('Успешно получили дискаунты: ' + html);
         json = JSON.parse(html);
         for (var i = 0; i<json.data.rests.length; ++i) {
             var discount = json.data.rests[i];
@@ -272,11 +272,17 @@ function getDiscount(result, discount) {
     if(discount.limit === 0)
     	return; //Empty discount
 
+	var status = {
+		active: 'Номер не блокирован',
+		blocked: 'Номер заблокирован'
+	};
+	getParam(status[discount.status]||discount.status, result, 'remainders.statuslock');
 	getParam(discount.endDay, result, 'remainders.endDate', null, null, parseDateISO);
 	
     if (/min/i.test(units)) {
         //Минуты
         sumParam(Math.round(discount.remain*100)/100, result, 'remainders.min_left', null, null, null, aggregate_sum);
+		sumParam(Math.round((discount.limit)*100/100), result, 'remainders.min_total', null, null, null, aggregate_sum);
         sumParam(Math.round((discount.limit - discount.remain)*100/100), result, 'remainders.min_used', null, null, null, aggregate_sum);
         sumParam(discount.endDay || undefined, result, 'remainders.min_till', null, null, parseDateISO, aggregate_min);
     } else if (/[кмгkmg][bб]/i.test(units)) {
@@ -284,11 +290,13 @@ function getDiscount(result, discount) {
         var left = parseTraffic(discount.remain + discount.uom);
         var total = parseTraffic(discount.limit + discount.uom);
         sumParam(left, result, 'remainders.traffic_left', null, null, null, aggregate_sum);
+		sumParam(total, result, 'remainders.traffic_total', null, null, null, aggregate_sum);
         sumParam(total - left, result, 'remainders.traffic_used', null, null, null, aggregate_sum);
         sumParam(discount.endDay || undefined, result, 'remainders.traffic_till', null, null, parseDateISO, aggregate_min);
     } else if (/pcs/i.test(units)) {
         //СМС/ММС
         sumParam(discount.remain, result, 'remainders.sms_left', null, null, null, aggregate_sum);
+		sumParam(discount.limit, result, 'remainders.sms_total', null, null, null, aggregate_sum);
         sumParam(discount.limit - discount.remain, result, 'remainders.sms_used', null, null, null, aggregate_sum);
         sumParam(discount.endDay || undefined, result, 'remainders.sms_till', null, null, parseDateISO, aggregate_min);
     } else {
@@ -326,12 +334,69 @@ function processPayments(result){
         var p = {};
 
         getParam(pmnt.sum.amount, p, 'payments.sum', null, null, parseBalanceSilent);
-		getParam(pmnt.type, p, 'payments.descr');
-		
         getParam(pmnt.payDate, p, 'payments.date', null, null, parseDateISO);
+		getParam(pmnt.type, p, 'payments.descr');
 
         result.payments.push(p);
     }
+}
+
+function processServices(result){
+    if (!AnyBalance.isAvailable('services'))
+        return;
+
+    AnyBalance.trace("Searching for services");
+
+    var subsid = getSubscriberId();
+	
+	try {
+		var html = AnyBalance.requestGet(baseurl + "api/subscribers/" + subsid + "/services", g_headers);
+		
+		var json = getJson(html);
+	} catch (e) {}
+	
+	if(!json || !json.data) {
+		AnyBalance.trace(html);
+		AnyBalance.trace('Не удалось получить список услуг, может их просто нет?');
+		return;
+	}
+	
+//	AnyBalance.trace('Servises list json: ' + JSON.stringify(json));
+    result.services = {};
+	
+    getParam(0, result.services, 'services.services_free');
+	getParam(0, result.services, 'services.services_paid');
+	getParam(0, result.services, 'services.services_total');
+	getParam(0, result.services, 'services.services_abon');
+	
+	for (var i = 0; i < json.data.length; ++i) {
+        var srvs = json.data[i];
+		
+        if(srvs.status != "CONNECTED") // Доступные к подключению услуги пропускаем
+			continue
+		AnyBalance.trace('Найдена услуга ' + srvs.name);
+
+		if(srvs.abonentFee.amount == 0 || srvs.abonentFee.amount == null){
+			AnyBalance.trace('Это бесплатная услуга');
+			sumParam(1, result.services, 'services.services_free', null, null, parseBalanceSilent, aggregate_sum);
+			sumParam(1, result.services, 'services.services_total', null, null, parseBalanceSilent, aggregate_sum);
+		}else if(srvs.abonentFee.amount != 0){
+			AnyBalance.trace('Это платная услуга');
+			var dt = new Date();
+			sumParam(1, result.services, 'services.services_paid', null, null, parseBalanceSilent, aggregate_sum);
+            
+		    if(srvs.abonentFee.period == 'day'){
+                var cp = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate(); // Дней в этом месяце
+				var cpt = 'в сутки';
+            }else{
+                var cp = 1;
+				var cpt = 'в месяц';
+            }
+		    AnyBalance.trace('Платная услуга ' + srvs.name + ': ' + srvs.abonentFee.amount + ' ₽ ' + cpt);
+		    sumParam(srvs.abonentFee.amount*cp, result.services, 'services.services_abon', null, null, parseBalanceSilent, aggregate_sum);
+			sumParam(1, result.services, 'services.services_total', null, null, parseBalanceSilent, aggregate_sum);
+		}
+	}
 }
 
 function processInfo(result){
@@ -350,7 +415,7 @@ function processInfo(result){
 
     var json = getJson(html);
     getParam(json.data.fullName, info, "info.fio");
-    getParam(subsid, info, "info.mphone");
-    getParam(json.data.address.city + ' ' + json.data.address.street + ' ' + json.data.address.house, info, "info.address");
-    getParam(json.data.email || undefined, info, "info.email");
+    getParam(subsid.replace(/.*(\d{3})(\d{3})(\d{2})(\d{2})$/i, '+7 $1 $2-$3-$4'), info, "info.mphone");
+    getParam(json.data.address.city + ', ' + json.data.address.street + ', ' + json.data.address.house, info, "info.address");
+    getParam(json.data.email || 'Не указан', info, "info.email");
 }

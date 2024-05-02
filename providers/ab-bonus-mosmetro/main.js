@@ -7,7 +7,7 @@ var g_headers = {
 	'Accept': 'application/json, text/plain, */*',
 	'Accept-Language': 'ru',
 	'Connection': 'keep-alive',
-	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36',
+	'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
 };
 
 function generateCodeVerifier() {
@@ -39,8 +39,10 @@ function loginPure(){
 	var challenge = hash.toString(CryptoJS.enc.Base64)
 		.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-	var html = AnyBalance.requestGet(baseurl + '/api/externals/v1.0?redirectUri=' + baseurl + '/external-auth&state=' + state + '&codeChallenge=' + challenge + '&codeChallengeMethod=S256',
-		{Referer: baseurl + '/'});
+	var html = AnyBalance.requestGet(baseurl + '/api/externals/v1.0?redirectUri=' + baseurl + '/external-auth&state=' + state + '&codeChallenge=' + challenge + '&codeChallengeMethod=S256', addHeaders({
+		Referer: baseurl + '/sign-in',
+		'X-API-Variant': 'test'
+	}));
 	var json = getJson(html);
 
 	var url = json.data.authorizeUrl;
@@ -205,10 +207,10 @@ function main() {
 	g_headers.Authorization = 'Bearer ' + AnyBalance.getData('accessToken');
 	var html = AnyBalance.requestGet(baseurl + '/api/carriers/v1.0/linked', addHeaders({Referer: baseurl + '/personal-cabinet'}));
 	var json = getJson(html);
+	AnyBalance.trace(JSON.stringify(json));
 	
 	AnyBalance.trace("Найдено карт: " + json.data.cards.length);
 	var selected;
-	var number;
 
 	for(var i=0; i<json.data.cards.length; ++i){
 		var card = json.data.cards[i];
@@ -217,10 +219,6 @@ function main() {
 
 		if((prefs.num && endsWith(card.card.cardNumber, prefs.num)) || (!prefs.num && i==0)){
 			AnyBalance.trace('Выбираем эту карту');
-			getParam(name, result, '__tariff');
-			getParam(card.balance.balance, result, 'balance');
-			getParam(card.balance.bonus, result, 'bonus');
-			number = card.card.cardNumber;
 			selected = card;
 		}
 	}
@@ -232,11 +230,52 @@ function main() {
 			throw new AnyBalance.Error('В кабинете не прикреплена ни одна карта');
 	}
 	
+	var number = selected.card.cardNumber;
+	var cardId = selected.card.linkedCardId;
+	var name = selected.card.cardTypeName + '/' + selected.card.displayName + ' ' + selected.card.cardNumber;
+	
+	var cardState = {action: 'Активна', annulled: 'Заблокирована', blocked: 'Заблокирована', undefined: ''};
+	var ticketState = {true: 'Используется', false: 'Не используется', undefined: ''};
+	
+	getParam(0, result, 'balance');
+	getParam(0, result, 'bonus');
+	if(selected.balance){ // У некоторых карт ключ balance отсутствует
+	    getParam(0|selected.balance.balance, result, 'balance');
+	    getParam(0|selected.balance.bonus, result, 'bonus');
+	}else{
+		AnyBalance.trace('Балансы не найдены');
+	}
+	getParam(name, result, '__tariff');
+	getParam(cardState[selected.status]||selected.status, result, 'cardstatus');
+	
+	if (selected.tickets && selected.tickets.length && selected.tickets.length > 0){
+		AnyBalance.trace("Найдено билетов: " + selected.tickets.length);
+		for(var i=0; i<selected.tickets.length; ++i){
+	    	var ticket = selected.tickets[i];
+            
+			getParam(ticket.validDateTimeUtc, result, 'lasttickettime');
+	        getParam(ticket.remainDayCount, result, 'lastticketdays');
+	        getParam(ticket.ticketName, result, 'lastticketname');
+			getParam(ticketState[ticket.isActive]||ticket.isActive, result, 'lastticketstatus');
+			break;
+	    }
+	}else{
+		AnyBalance.trace('Билеты не найдены');
+	}
+	
 	var html = AnyBalance.requestGet(baseurl + '/api/trips/v1.0?size=6', addHeaders({Referer: baseurl + '/trips-history'}));
 	var json = getJson(html);
 	AnyBalance.trace(JSON.stringify(json));
 	
-	if (json.data.items && json.data.items.length){
+	if(!json.data){
+	    AnyBalance.trace('Не удалось получить историю проходов по основной ссылке. Пробуем получить данные со страницы карты...');
+	    var html = AnyBalance.requestGet(baseurl + '/api/trips/v1.0?size=3&linkedCardIds=' + cardId, addHeaders({Referer: baseurl + '/my-transport-card/' + cardId}));
+	    var json = getJson(html);
+	    AnyBalance.trace(JSON.stringify(json));
+	}
+	
+	if (json.data && json.data.items && json.data.items.length && json.data.items.length > 0){
+		AnyBalance.trace("Найдено проходов: " + json.data.items.length);
 	    getParam(0, result, 'leftpaytime');
 		
 		for(var i=0; i<json.data.items.length; ++i){
@@ -245,7 +284,7 @@ function main() {
 			
 			if(cardNum == number){
 				getParam(item.trip.date, result, 'lastpaytime');
-	            getParam(item.operation.sum, result, 'lastpaysum');
+	            getParam(0|item.operation.sum, result, 'lastpaysum');
 	            getParam(item.displayName, result, 'lastpayname');
 				break;
 			}
@@ -271,7 +310,7 @@ function main() {
 	    	}
 	    }
 	}else{
-		AnyBalance.trace('Последний проход не найден');
+		AnyBalance.trace('История проходов не найдена');
 	}
 	
 	var html = AnyBalance.requestPost(baseurl + '/api/operations/v1.0?size=6', JSON.stringify({
@@ -282,22 +321,38 @@ function main() {
         "periodStartDateUtc": null
     }), addHeaders({'Content-Type': 'application/json', Referer: baseurl + '/operations-history'}));	
 	var json = getJson(html);
-	AnyBalance.trace(JSON.stringify(json));
+	AnyBalance.trace('Operations history from main page: ' + JSON.stringify(json));
 	
-	if (json.data.items && json.data.items.length){
+	if(!json.data){
+	    AnyBalance.trace('Не удалось получить историю операций по основной ссылке. Пробуем получить данные со страницы карты...');
+	    var html = AnyBalance.requestPost(baseurl + '/api/operations/v1.0?size=3', JSON.stringify({
+            "linkedBankCardId": [],
+            "linkedCardIds": [
+                cardId
+            ],
+            "operationTypes": [],
+            "periodEndDateUtc": "",
+            "periodStartDateUtc": ""
+        }), addHeaders({'Content-Type': 'application/json', Referer: baseurl + '/my-transport-card/' + cardId}));	
+	    var json = getJson(html);
+	    AnyBalance.trace('Operations history from card page: ' + JSON.stringify(json));
+	}
+	
+	if (json.data && json.data.items && json.data.items.length && json.data.items.length > 0){
+		AnyBalance.trace("Найдено операций: " + json.data.items.length);
 	    for(var i=0; i<json.data.items.length; ++i){
 	    	var item = json.data.items[i];
 	    	var cardNum = item.card.cardNumber;
 
 	    	if(cardNum == number){
 	    		getParam(item.date, result, 'lastoperdate');
-	    		getParam(item.payment.sum, result, 'lastopersum');
+	    		getParam((item.payment && item.payment.sum)||(item.deferredWrite && item.deferredWrite.sum), result, 'lastopersum');
 	    		getParam(item.displayName, result, 'lastopername');
 	    		break;
 	    	}
 	    }
 	}else{
-		AnyBalance.trace('Последняя операция не найдена');
+		AnyBalance.trace('История операций не найдена');
 	}
 
 	AnyBalance.setResult(result);

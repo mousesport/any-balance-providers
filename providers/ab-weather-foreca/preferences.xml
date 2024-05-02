@@ -4,11 +4,22 @@
 		obligatory="true"
 		title="Город"
 		positiveButtonText="ОК"
-		summary="|Прогноз для города|{@s}"
+		summary="Город для информации о погоде|Введите название\n|{@s}\n"
 		dialogTitle="Город"
 		negativeButtonText="Отмена"
 		dialogMessage="Введите название города на русском языке"
 		key="city_name"
+		inputType="text">
+	</EditTextPreference>
+	<EditTextPreference
+		obligatory="true"
+		title="Регион"
+		positiveButtonText="ОК"
+		summary="Регион для информации о погоде|Необязательно\n|{@s}\n"
+		dialogTitle="Регион"
+		negativeButtonText="Отмена"
+		dialogMessage="Введите название региона на русском языке"
+		key="country_name"
 		inputType="text">
 	</EditTextPreference>
 </PreferenceScreen>

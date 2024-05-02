@@ -8,6 +8,36 @@ var g_headers = {
     'User-Agent': 'OnePlus ONEPLUS A3010/android: 9/TCSMB/5.2.1'
 }
 
+var g_currency = {
+	RUB: '₽',
+	USD: '$',
+	EUR: '€',
+	BYN: 'Br',
+	KZT: '₸',
+	GBP: '£',
+	CNY: 'Ұ',
+	undefined: ''
+};
+
+var g_system = {
+	MR: 'МИР',
+	MIR: 'МИР',
+	VI: 'VISA',
+	VISA: 'VISA',
+	MC: 'MasterCard',
+	MASTERCARD: 'MasterCard',
+	undefined: ''
+};
+
+var g_status = {
+	NORM: 'Активен',
+	ACTIVE: 'Активен',
+	CLOSED: 'Закрыт',
+	ARRESTED: 'Арестован',
+	BLOCKED: 'Заблокирован',
+	undefined: ''
+};
+
 var g_baseurl = 'https://api.tinkoff.ru/v1/';
 var g_sessionid;
 var g_postParams = {
@@ -47,6 +77,7 @@ function requestJson(action, data, options) {
 	params.push(encodeURIComponent('connectionType') + '=' + encodeURIComponent(g_postParams.connectionType));
 	params.push(encodeURIComponent('deviceId') + '=' + encodeURIComponent(getDeviceId()));
 
+	AnyBalance.trace('Запрос : ' + action);
 	if(options.post) {
 		html = AnyBalance.requestPost(g_baseurl + action + '?' + params.join('&'), options.post, g_headers);
 	}else{
@@ -54,6 +85,7 @@ function requestJson(action, data, options) {
 	}
 
 	var json = getJson(html);
+	AnyBalance.trace('Ответ: ' + JSON.stringify(json));
 	
 	if(json.resultCode != 'OK' && !options.noException) {
 		AnyBalance.trace('Ошибка: ' + action + ', ' + json.errorMessage);
@@ -282,10 +314,10 @@ function processCard(card, acc, result){
 	AnyBalance.trace('Обработка карты ' + result.__name);
 
 	var balance = jspath1(card, '$.availableBalance') || jspath1(acc, '$.moneyAmount') || jspath1(acc, '$.accountBalance');
-
-    getParam(jspath1(acc, '$.accountBalance.value'), result, 'cards.balance');
-    getParam(jspath1(balance, '$.value'), result, 'cards.available');
-    getParam(jspath1(balance, '$.currency.name'), result, 'cards.currency');
+    
+	getParam(jspath1(acc, '$.accountBalance.value'), result, ['cards.balance', 'cards.currency']);
+    getParam(jspath1(balance, '$.value'), result, ['cards.available', 'cards.currency']);
+    getParam(g_currency[jspath1(balance, '$.currency.name')]||jspath1(balance, '$.currency.name'), result, ['cards.currency', 'cards.balance']);
     getParam(jspath1(card, '$.expiration.milliseconds'), result, 'cards.till');
     getParam(jspath1(card, '$.activated'), result, 'cards.active');
     getParam(jspath1(card, '$.primary'), result, 'cards.primary');
@@ -293,11 +325,40 @@ function processCard(card, acc, result){
     getParam(jspath1(card, '$.status'), result, 'cards.status');
     getParam(jspath1(card, '$.statusCode'), result, 'cards.status_code'); //NORM
     getParam(jspath1(card, '$.name'), result, 'cards.name');
+	getParam(g_system[jspath1(card, '$.paymentSystem')]||jspath1(card, '$.paymentSystem'), result, 'cards.payment_system');
 
     getParam(jspath1(acc, '$.externalAccountNumber'), result, 'cards.accnum');
-
-    if(AnyBalance.isAvailable('cards.transactions'))
+	
+	if(AnyBalance.isAvailable('cards.transactions'))
         processCardsTransactions(result);
+}
+
+function processCategories(result){
+	if(!AnyBalance.isAvailable('increasedcashback'))
+        return;
+	
+	AnyBalance.trace('Пробуем получить данные по повышенному кэшбэку...');
+	var json = requestJson('client_offer_essences');
+	
+	for(var i = 0; i < json.payload.length; i++) {
+        var pld = json.payload[i];
+			
+		if(pld.essences && pld.essences.length > 0){
+		    AnyBalance.trace('Найдено категорий: ' + pld.essences.length);
+		    for(var i = 0; i < pld.essences.length; i++) {
+                var category = pld.essences[i];
+			    
+				if(!jspath1(category, '$.isActive')){
+					continue;
+				}else{
+					sumParam(jspath1(category, '$.name')  + ': ' + jspath1(category, '$.percent') + '%', result, 'increasedcashback', null, null, null, create_aggregate_join(',<br> '));
+			    }
+		    }
+	    }else{
+		    AnyBalance.trace('Не удалось найти информацию по категориям месяца');
+		    result.increasedcashback = 'Нет данных';
+	    }
+	}
 }
 
 function processAccounts(result){
@@ -338,21 +399,23 @@ function processAccount(acc, result){
 
 	var balance = jspath1(acc, '$.moneyAmount') || jspath1(acc, '$.accountBalance');
 
-    getParam(jspath1(acc, '$.accountBalance.value'), result, 'accounts.balance');
-    getParam(jspath1(acc, '$.moneyAmount.value'), result, 'accounts.available');
-    getParam(jspath1(balance, '$.currency.name'), result, 'accounts.currency');
+    getParam(jspath1(acc, '$.accountBalance.value'), result, ['accounts.balance', 'accounts.currency']);
+    getParam(jspath1(acc, '$.moneyAmount.value'), result, ['accounts.available', 'accounts.currency']);
+    getParam(g_currency[jspath1(balance, '$.currency.name')]||jspath1(balance, '$.currency.name'), result, ['accounts.currency', 'accounts.balance']);
     getParam(jspath1(acc, '$.creationDate.milliseconds'), result, 'accounts.date_start');
     getParam(jspath1(acc, '$.accountGroup'), result, 'accounts.type');
     getParam(jspath1(acc, '$.accountType'), result, 'accounts.type_code');
     getParam(jspath1(acc, '$.authorizationsAmount.value'), result, 'accounts.blocked');
 
-    getParam(jspath1(acc, '$.defaultMonthlyCashLimit.value'), result, 'accounts.free_cash_limit');
+    getParam(jspath1(acc, '$.c2cOutLimitBorder.value'), result, 'accounts.c2c_out_limit');
+	getParam(jspath1(acc, '$.defaultMonthlyCashLimit.value'), result, 'accounts.free_cash_limit');
     getParam(jspath1(acc, '$.defaultRenewalAmountLeft.value'), result, 'accounts.free_add_limit');
+	getParam(jspath1(acc, '$.c2cOutLimit.value'), result, 'accounts.c2c_out_left');
     getParam(jspath1(acc, '$.monthlyCashLimit.value'), result, 'accounts.free_cash_left');
     getParam(jspath1(acc, '$.renewalAmountLeft.value'), result, 'accounts.free_add_left');
 
     getParam(jspath1(acc, '$.rate'), result, 'accounts.pct');
-    getParam(jspath1(acc, '$.status'), result, 'accounts.status_code'); //NORM
+    getParam(g_status[jspath1(acc, '$.status')]||jspath1(acc, '$.status'), result, 'accounts.status'); //NORM
 
     getParam(jspath1(acc, '$.creditLimit.value'), result, 'accounts.limit');
 
@@ -452,13 +515,13 @@ function processDeposit(acc, result){
     getParam(jspath1(acc, '$.interest.value'), result, 'deposits.pct_sum');
     getParam(jspath1(acc, '$.typeOfInterest'), result, 'deposits.pct_condition'); //TO_DEPOSIT
 
-    getParam(jspath1(acc, '$.moneyAmount.value'), result, 'deposits.balance');
-    getParam(jspath1(acc, '$.moneyAmount.currency.name'), result, 'deposits.currency');
-    getParam(jspath1(acc, '$.startAmount'), result, 'deposits.balance_start');
+    getParam(jspath1(acc, '$.moneyAmount.value'), result, ['deposits.balance', 'deposits.currency']);
+    getParam(g_currency[jspath1(acc, '$.moneyAmount.currency.name')]||jspath1(acc, '$.moneyAmount.currency.name'), result, ['deposits.currency', 'deposits.balance']);
+    getParam(jspath1(acc, '$.startAmount'), result, ['deposits.balance_start', 'deposits.currency']);
 
     getParam(jspath1(acc, '$.period'), result, 'deposits.period'); //В месяцах
 
-    getParam(jspath1(acc, '$.status'), result, 'deposits.status_code'); //ACTIVE
+    getParam(g_status[jspath1(acc, '$.status')]||jspath1(acc, '$.status'), result, 'deposits.status'); //ACTIVE
 
     if(AnyBalance.isAvailable('deposits.accnum')){
         var acccur = findAccountById(jspath1(acc, '$.currentLinkedAccount'));
@@ -480,13 +543,13 @@ function processSaving(acc, result){
 
     getParam(jspath1(acc, '$.creationDate.milliseconds'), result, 'savings.date_start');
     getParam(jspath1(acc, '$.interest.value'), result, 'savings.pct_sum');
-    getParam(jspath1(acc, '$.tariffInfo.interestRate') || jspath1(acc, '$.rate'), result, 'savings.pct');
+    getParam(jspath1(acc, '$.rate') || jspath1(acc, '$.tariffInfo.interestRate'), result, 'savings.pct');
 
-    getParam(jspath1(acc, '$.accountBalance.value'), result, 'savings.balance');
-    getParam(jspath1(acc, '$.moneyAmount.value'), result, 'savings.available');
-    getParam(jspath1(acc, '$.moneyAmount.currency.name'), result, 'savings.currency');
+    getParam(jspath1(acc, '$.accountBalance.value'), result, ['savings.balance', 'savings.currency']);
+    getParam(jspath1(acc, '$.moneyAmount.value'), result, ['savings.available', 'savings.currency']);
+    getParam(g_currency[jspath1(acc, '$.moneyAmount.currency.name')]||jspath1(acc, '$.moneyAmount.currency.name'), result, ['savings.currency', 'savings.balance']);
 
-    getParam(jspath1(acc, '$.status'), result, 'savings.status_code'); //ACTIVE
+    getParam(g_status[jspath1(acc, '$.status')]||jspath1(acc, '$.status'), result, 'savings.status'); //ACTIVE
 
     if(AnyBalance.isAvailable('savings.transactions'))
         processSavingsTransactions(result);
@@ -534,7 +597,7 @@ function fetchSaving(accounts, baseurl, sessionid){
 
 	result = {success: true};
 	getParam(saving.moneyAmount.value, result, 'balance');
-	getParam(saving.moneyAmount.currency.name, result, ['currency', 'balance']);
+	getParam(g_currency[saving.moneyAmount.currency.name]||saving.moneyAmount.currency.name, result, ['currency', 'balance']);
 	getParam(saving.nextStatementDate.milliseconds, result, 'nextStatementDate');
 	getParam(saving.name, result, 'name');
 	getParam(saving.name, result, '__tariff');
