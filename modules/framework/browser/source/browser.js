@@ -1,5 +1,6 @@
 const BrowserAPI = (() => {
     const browserApiRelease = 'http://browser.anybalance.ru:4024';
+    const browserApiWinRelease = 'https://browin.anybalance.ru';
     const browserApiDebug = 'http://localhost:4024';
 
     /*
@@ -13,11 +14,13 @@ const BrowserAPI = (() => {
 
     type Options = {
         provider: string
+        win?: boolean
         debug?: boolean
         userAgent: string,
         singlePage?: boolean,
         incognito?: boolean, //По умолчанию true
         headful?: boolean,
+        noInterception?: boolean,
         rules?: RuleSource[]
         additionalRequestHeaders: {
             url?: RegExp,
@@ -33,7 +36,7 @@ const BrowserAPI = (() => {
         }
 
         requestAPI(verb, json) {
-            const browserApi = this.options.debug ? browserApiDebug : browserApiRelease;
+            const browserApi = this.options.debug ? browserApiDebug : (this.options.win ? browserApiWinRelease : browserApiRelease);
             const html = json
                 ? AnyBalance.requestPost(browserApi + '/' + verb, JSON.stringify(json), {"Referer": this.options.provider + '', "Content-Type": "application/json"})
                 : AnyBalance.requestGet(browserApi + '/' + verb + (verb.indexOf('?') >= 0 ? '&' : '?') + '_=' + (+new Date()), {"Referer": this.options.provider + ''});
@@ -51,6 +54,8 @@ const BrowserAPI = (() => {
                 userAgent: this.options.userAgent,
                 singlePage: this.options.singlePage,
                 headful: this.options.headful,
+		noInterception: this.options.noInterception,
+		incognito: this.options.incognito,
                 url: url,
                 rules: this.options.rules
             })
@@ -76,8 +81,11 @@ const BrowserAPI = (() => {
 			    if(hv.trim() === '')
 				continue;
                             const values = hv.split('\n');
-                            for (let i = 0; i < values.length; ++i)
+                            for (let i = 0; i < values.length; ++i){
+				if(name.toLowerCase() === 'content-length')
+					continue;
                                 headers.push([name, values[i]]);
+			    }
                         }
 
                         let additionalHeaders = {};

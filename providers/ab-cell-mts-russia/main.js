@@ -6,6 +6,7 @@ function main() {
     var prefs = AnyBalance.getPreferences();
 
 	AnyBalance.setOptions({
+		CLIENT: 'okhttp', 
 		PER_DOMAIN: {
 			'ihelper.mts.ru': {
 				SSL_ENABLED_PROTOCOLS: ['TLSv1', 'TLSv1.1', 'TLSv1.2']
@@ -49,7 +50,9 @@ var g_countersTable = {
 		"sms_world": "remainders.sms_world",
 		"mms_left": "remainders.mms_left",
 		"sms_used": "remainders.sms_used",
+		"sms_total": "remainders.sms_total",
 		"min_used": "remainders.min_used",
+		"min_total": "remainders.min_total",
 		"min_love": "remainders.min_love",
 		"min_used_mts": "remainders.min_used_mts",
 		"min_left_mts": "remainders.min_left_mts",
@@ -57,6 +60,8 @@ var g_countersTable = {
 		"tourist": "remainders.tourist",
 		"abonservice": "expenses.abonservice",
 		"refill": "expenses.refill",
+		"total_msg": "messages.total_msg",
+		"unread_msg": "messages.unread_msg",
 		"debt": "debt",
 		"pay_till": "pay_till",
 		"min_till": "remainders.min_till",
@@ -65,6 +70,7 @@ var g_countersTable = {
 		"mms_till": "remainders.mms_till",
 		"traffic_left_mb": "remainders.traffic_left_mb",
 		"traffic_used_mb": "remainders.traffic_used_mb",
+		"traffic_total_mb": "remainders.traffic_total_mb",
 		"traffic_used_by_acceptors_mb": "remainders.traffic_used_by_acceptors_mb",
 		"cashback": "remainders.cashback",
 		"cashback_mts": "remainders.cashback_mts",
@@ -81,6 +87,7 @@ var g_countersTable = {
 		"usedinthismonth": "expenses.usedinthismonth",
 		"usedinprevmonth": "expenses.usedinprevmonth",
 		"license": "info.licschet",
+		"region": "info.region",
 		"phone": "info.phone",
 		"fio": "info.fio",
 		"bonus_balance": "remainders.bonus_balance",

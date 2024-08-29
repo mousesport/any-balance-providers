@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen>
+    <ListPreference
+        title="Client"
+        summary="Which HTTP client to use|Select|{@s} selected. "
+        key="client"
+        defaultValue="apache"
+        entries="Apache Client|OkHttp Client"
+        entryValues="apache|okhttp" />
+    <CheckBoxPreference
+        title="Cookies"
+        defaultValue="true"
+        summaryOn="Test cookies"
+        summaryOff="Skip cookies test"
+        key="cookies" />
+    <CheckBoxPreference
+        title="Redirect"
+        defaultValue="true"
+        summaryOn="Test manual redirect"
+        summaryOff="Skip manual redirect test"
+        key="redirect" />
+
+</PreferenceScreen>
